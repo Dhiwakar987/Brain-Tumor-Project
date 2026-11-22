@@ -54,3 +54,9 @@ Uploaded `BraTS20_Training_001_slice8.npy` inspected safely: (4,240,240) uint8 0
 **Sufficient for the probe? NO** - zero image-mask pairs. Channel order, orientation, label mapping and training normalisation remain UNVERIFIED; config flags unchanged (false).
 **Added:** `scripts/match_npy_to_nifti.py` (proves channel order/axis/orientation/scaling by pixel-matching slices to their source NIfTI; writes masks only after a verified, cross-patient-consistent match; tested on SYNTHETIC data only - never run on real NIfTI); invertible `slice_orientation` option in the inference pipeline (default identity = unchanged behaviour; round-trip + pipeline tests). Bugs found by tests while building: tuple-assignment NameError, runner-up logic, tie handling.
 **Not tested:** anything on real NIfTI/masks; Windows.
+## Dataset probe update (2026-11-22)
+- `_output_.zip` contains 50,706 image slices and 50,706 mask slices.
+- Extracted image folder contains slices for 368 patient IDs.
+- Probe ran on 40 paired slices: stored channel order (0,1,2,3) was the clear WT-Dice winner (0.899; runner-up 0.755). This supports the stored order diagnostically, but does not verify modality names.
+- Normalization remains inconclusive: div255 and div_slice_max tied on the probe. Keep modality names and normalization marked UNVERIFIED.
+- Probe is a training-data diagnostic, not an independent accuracy evaluation.
