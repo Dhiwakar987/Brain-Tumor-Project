@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Model Capabilities{% endblock %}
+
+{% block content %}
+
+
+<div class="alert alert-warning">
+    Academic research prototype. Not clinically validated.
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">1. Multimodal MRI Input</h2>
+        <p>The system uses four MRI modalities:</p>
+        <ul>
+            <li><strong>T1:</strong> Shows brain anatomical structure.</li>
+            <li><strong>T1ce:</strong> Highlights contrast-enhanced regions.</li>
+            <li><strong>T2:</strong> Shows fluid and abnormal tissue changes.</li>
+            <li><strong>FLAIR:</strong> Highlights abnormal signal regions.</li>
+        </ul>
+        <p>Each modality provides complementary information about brain tissue.</p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">2. Segmentation Model</h2>
+        <ul>
+            <li>Architecture: U-Net</li>
+            <li>Encoder: ResNet34</li>
+            <li>Input channels: 4</li>
+            <li>Output classes: 4</li>
+            <li>Model checkpoint: best_unet_brats.pth</li>
+        </ul>
+        <p>The available 2D demo generates tumour segmentation predictions.</p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">3. Implemented 2D Features</h2>
+        <ul>
+            <li>MRI slice upload and prediction.</li>
+            <li>Ground-truth and predicted mask comparison.</li>
+            <li>Dice and IoU evaluation.</li>
+            <li>Segmentation overlay visualization.</li>
+            <li>Tumour area and area percentage.</li>
+            <li>Connected region count and largest region area.</li>
+            <li>Perimeter and eccentricity measurements.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">4. Features Not Yet Implemented</h2>
+        <ul>
+            <li>Trained tumour classification model.</li>
+            <li>Grad-CAM++ explainability.</li>
+            <li>Verified 3D visualization.</li>
+            <li>Independent model performance validation.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <strong>Important:</strong> This platform is an academic research
+    prototype. It must not be used for medical diagnosis or treatment.
+</div>
+{% endblock %}
+

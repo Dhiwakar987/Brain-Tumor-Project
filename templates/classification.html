@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Tumour classification{% endblock %}
+{% block content %}
+<div class="card mb-3"><div class="card-body"><div class="d-flex align-items-center gap-2 mb-2"><h2 class="h5 mb-0">Tumour classification</h2><span class="chip warn">unavailable</span></div>
+<p>No classification model is installed, so no predicted class or confidence is shown. This page will not display placeholder or invented results.</p>
+<table class="table table-sm"><thead><tr><th>Task</th><th>Status in this project</th><th>Genuine source</th></tr></thead><tbody>
+<tr><td>Tumour <b>detection</b></td><td><span class="chip">no dedicated model</span> (an empty vs non-empty predicted mask is only a segmentation by-product and is flagged as a QC warning)</td><td>–</td></tr>
+<tr><td>Tumour <b>segmentation</b></td><td><span class="chip teal">available</span> U-Net / ResNet34, strict checkpoint load verified</td><td><code>best_unet_brats.pth</code></td></tr>
+<tr><td>Tumour <b>classification</b> (e.g. HGG vs LGG, tumour type)</td><td><span class="chip warn">unavailable</span></td><td>no trained classifier supplied</td></tr></tbody></table>
+<h3 class="h6">What is needed to enable it</h3>
+<ul class="small mb-0"><li>A trained classifier checkpoint (e.g. ResNet50) <b>and</b> its training code: class names/order, input size, preprocessing.</li>
+<li>Labels. The BraTS 2020 training set provides a per-patient HGG/LGG grade (folder / <code>name_mapping.csv</code>), so a separate HGG-vs-LGG classifier could be trained on a <b>patient-wise</b> split; it must not be trained on slices of the same patient that appear in the test set. Training such a model was not done here.</li>
+<li>Held-out evaluation (accuracy, precision, recall, F1, confusion matrix) before any prediction is shown.</li></ul></div></div>
+{% endblock %}

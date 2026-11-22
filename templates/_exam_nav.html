@@ -1,0 +1,10 @@
+<div class="page-head">
+  <div><span class="chip teal">Examination #{{ exam.id }}</span> {% if exam.patient_label %}<span class="chip">{{ exam.patient_label }}</span>{% endif %}
+    <span class="chip {{ 'ok' if exam.status=='segmented' else ('bad' if exam.status in ['failed','interrupted'] else 'warn') }}" id="examStatusChip">{{ exam.status }}</span>
+    {% if exam.has_ground_truth %}<span class="chip ok">ground truth provided</span>{% else %}<span class="chip">no ground truth</span>{% endif %}
+    <span class="text-muted small ms-1">{{ exam.created_at[:16]|replace('T',' ') }} UTC</span></div>
+  <ul class="nav nav-pills">
+    {% for ep, label in [('results','Viewer'),('radiomics','Radiomics'),('evaluate','Evaluation'),('report','Reports & export')] %}
+    <li class="nav-item"><a class="nav-link {{ 'active' if request.endpoint == ep }}" href="{{ url_for(ep, exam_id=exam.id) }}">{{ label }}</a></li>{% endfor %}
+  </ul>
+</div>

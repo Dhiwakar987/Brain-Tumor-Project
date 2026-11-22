@@ -1,0 +1,37 @@
+# Model + preprocessing configuration.
+# IMPORTANT: Values marked UNVERIFIED were NOT confirmed against the original training
+# code (it was not supplied). Edit them to match your training pipeline, then set the
+# matching "verification" flags to true.  Reliable evaluation requires that inference
+# preprocessing equals training preprocessing.
+architecture: Unet                 # segmentation_models_pytorch.Unet
+encoder_name: resnet34
+encoder_weights: null              # no ImageNet download at inference; weights come from checkpoint
+in_channels: 4
+classes: 4
+activation: null                   # raw logits are returned; argmax is applied in inference.py
+
+modality_order: [t1, t1ce, t2, flair]   # UNVERIFIED channel order
+slice_axis: 2                           # 2 = axial slices of a BraTS NIfTI (240x240x155)
+
+preprocessing:
+  normalization: zscore_nonzero    # UNVERIFIED. options: zscore_nonzero | minmax_volume | minmax_slice | none
+  clip_percentiles: null           # e.g. [0.5, 99.5]; null = no clipping
+  slice_orientation: identity      # in-plane op applied to each axial slice before the model (transpose/flipud/fliplr/rot90/rot180/rot270/transpose+rot180); set from scripts/match_npy_to_nifti.py
+  pad_multiple: 32                 # U-Net with ResNet34 needs H,W divisible by 32 (zero padding, cropped back)
+  skip_empty_slices: false         # true would skip all-zero slices (output stays background)
+
+# EVIDENCE (see verification/NPY_SLICE_INSPECTION.md): training slices are (4,240,240) uint8 0-255, and the checkpoint's BN statistics rule out
+# raw 0-255 inputs. Run `python scripts/probe_preprocessing.py` on your data/images + data/masks to choose normalization & channel order
+# (the options here are 'zscore_nonzero', 'minmax_volume' (0-1, ~ uint8/255), 'minmax_slice', 'none'). Do NOT set the flags below until that probe supports it.
+# model output class index -> BraTS label.  UNVERIFIED: many pipelines remap 4 -> 3.
+class_mapping:
+  0: 0
+  1: 1
+  2: 2
+  3: 4
+
+verification:
+  preprocessing_verified_against_training: false
+  class_mapping_verified: false
+  modality_order_verified: false
+  training_code_supplied: false

@@ -1,0 +1,59 @@
+{
+  "environment": {
+    "os": "Linux-6.18.44-fc-v470-x86_64-with-glibc2.39",
+    "cpu_count": 1,
+    "ram_total_mb": 4186,
+    "python": "3.12.3",
+    "torch": "2.15.0+cu132",
+    "cuda": false,
+    "torch_threads": 1
+  },
+  "results": [
+    {
+      "input": "SYNTHETIC noise volume (not BraTS)",
+      "shape": [
+        128,
+        128,
+        32
+      ],
+      "file_size_mb_each": 0.92,
+      "stages_s": {
+        "validation_s": 0.002,
+        "model_load_s": 15.82,
+        "preprocessing_s": 0.035,
+        "inference_s": 3.491,
+        "region_masks_s": 0.008,
+        "self_evaluation_s": 0.058
+      },
+      "wall_total_s": 19.43,
+      "cpu_time_s": 4.3,
+      "peak_rss_mb": 1013.4,
+      "output_mb": 0.002,
+      "s_per_slice": 0.1091,
+      "device": "cpu"
+    },
+    {
+      "input": "SYNTHETIC noise volume (not BraTS)",
+      "shape": [
+        240,
+        240,
+        155
+      ],
+      "file_size_mb_each": 15.57,
+      "stages_s": {
+        "validation_s": 0.044,
+        "model_load_s": 0.049,
+        "preprocessing_s": 1.454,
+        "inference_s": 30.395,
+        "region_masks_s": 0.118,
+        "self_evaluation_s": 3.101
+      },
+      "wall_total_s": 35.43,
+      "cpu_time_s": 35.11,
+      "peak_rss_mb": 1782.8,
+      "output_mb": 0.041,
+      "s_per_slice": 0.1961,
+      "device": "cpu"
+    }
+  ]
+}

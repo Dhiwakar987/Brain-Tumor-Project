@@ -1,0 +1,276 @@
+﻿
+{% extends "base.html" %}
+
+{% block title %}2D MRI Demo{% endblock %}
+{% block page_title %}2D MRI Segmentation Demo{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid">
+
+    <!-- Research Information -->
+    <div class="alert alert-info">
+        <strong>Research demonstration:</strong>
+        Upload a 2D MRI slice containing four channels and run
+        segmentation using the available U-Net checkpoint.
+        This is not a clinical diagnostic result.
+    </div>
+
+    <!-- Multimodal MRI Visualization -->
+    <div class="mt-4">
+
+        <h3 class="mb-3">Multimodal MRI Visualization</h3>
+
+        <p class="text-muted">
+            The system uses four MRI modalities to provide
+            different views of the brain for tumor analysis.
+        </p>
+
+        <div class="row g-4">
+
+            <!-- T1 MRI -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card shadow-sm h-100">
+
+                    <img
+                        src="{{ url_for('demo_2d_image', kind='t1') }}"
+                        class="card-img-top"
+                        alt="T1 MRI">
+
+                    <div class="card-body">
+                        <h5 class="card-title">T1 MRI</h5>
+
+                        <p class="card-text">
+                            Shows brain anatomy and structural details.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- T1ce MRI -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card shadow-sm h-100">
+
+                    <img
+                        src="{{ url_for('demo_2d_image', kind='t1ce') }}"
+                        class="card-img-top"
+                        alt="T1ce MRI">
+
+                    <div class="card-body">
+                        <h5 class="card-title">T1ce MRI</h5>
+
+                        <p class="card-text">
+                            Highlights contrast-enhancing regions.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- T2 MRI -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card shadow-sm h-100">
+
+                    <img
+                        src="{{ url_for('demo_2d_image', kind='t2') }}"
+                        class="card-img-top"
+                        alt="T2 MRI">
+
+                    <div class="card-body">
+                        <h5 class="card-title">T2 MRI</h5>
+
+                        <p class="card-text">
+                            Highlights fluid and abnormal tissue changes.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- FLAIR MRI -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card shadow-sm h-100">
+
+                    <img
+                        src="{{ url_for('demo_2d_image', kind='flair') }}"
+                        class="card-img-top"
+                        alt="FLAIR MRI">
+
+                    <div class="card-body">
+                        <h5 class="card-title">FLAIR MRI</h5>
+
+                        <p class="card-text">
+                            Helps highlight abnormal signal regions.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Dataset Patient and Slice Selection -->
+    <div class="card my-4">
+        <div class="card-body">
+            <h4>Select MRI Patient and Slice</h4>
+
+            <p class="text-muted">
+                Choose a patient and slice. The matching four-channel
+                MRI array and ground-truth mask will load automatically.
+            </p>
+
+            {% if patient_ids %}
+            <form method="POST" action="{{ url_for('demo_2d_run') }}">
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}">
+
+                <div class="mb-3">
+                    <label for="patient_id" class="form-label">Patient</label>
+                    <select
+                        class="form-select"
+                        id="patient_id"
+                        name="patient_id"
+                        required>
+                        {% for patient in patient_ids %}
+                        <option value="{{ patient }}">{{ patient }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="slice_index" class="form-label">Slice number</label>
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="slice_index"
+                        name="slice_index"
+                        min="0"
+                        value="10"
+                        required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    Load Slice and Run Segmentation
+                </button>
+            </form>
+            {% else %}
+            <div class="alert alert-warning">
+                Dataset not found. Check the brats2d images folder.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Segmentation Results -->
+    {% if comparison_image %}
+
+        <!-- Segmentation Metrics -->
+        <div class="card mb-4">
+
+            <div class="card-body">
+
+                <h4>Segmentation Metrics</h4>
+
+                <div class="metrics-grid">
+
+                    <div class="metric-card">
+                        <h5>Dice Score</h5>
+                        <p>{% if dice_score is not none %}{{ "%.4f"|format(dice_score) }}{% else %}N/A{% endif %}</p>
+                    </div>
+
+                    <div class="metric-card">
+                        <h5>IoU Score</h5>
+                        <p>{% if iou_score is not none %}{{ "%.4f"|format(iou_score) }}{% else %}N/A{% endif %}</p>
+                    </div>
+
+                </div>
+
+                <p class="text-muted mt-3">
+                    These scores compare the predicted tumour region
+                    with the supplied ground-truth mask.
+                </p>
+
+            </div>
+        </div>
+
+        <!-- Segmentation Comparison -->
+        <div class="card mb-4">
+
+            <div class="card-body">
+
+                <h4>Segmentation Comparison</h4>
+
+                <p class="text-muted">
+                    Comparison of the uploaded MRI, actual ground-truth
+                    mask, and U-Net prediction.
+                </p>
+
+                <img
+                    src="data:image/png;base64,{{ comparison_image }}"
+                    class="img-fluid rounded"
+                    alt="MRI, ground-truth mask and U-Net prediction comparison">
+
+                <p class="mt-3">
+                    <strong>Predicted classes:</strong>
+                    {{ prediction_classes }}
+                </p>
+
+            </div>
+        </div>
+
+        <!-- Segmentation Overlay -->
+        <div class="card mb-4">
+
+            <div class="card-body">
+
+                <h4>Segmentation Overlay</h4>
+
+                <p class="text-muted">
+                    Visual comparison of the ground-truth and predicted
+                    tumour regions over the MRI.
+                </p>
+
+                <img
+                    src="data:image/png;base64,{{ overlay_image }}"
+                    class="img-fluid rounded"
+                    alt="Ground-truth and prediction overlays">
+
+            </div>
+        </div>
+
+        <!-- 2D Tumour Measurements -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h4>2D Tumour Measurements</h4>
+                <p><strong>Tumour Area:</strong> {{ tumour_area }} pixels</p>
+                <p><strong>Tumour Area Percentage (of slice):</strong> {{ tumour_area_percentage }}%</p>
+                <p><strong>Separate Tumour Regions:</strong> {{ region_count }}</p>
+                <p><strong>Largest Region Area:</strong> {{ largest_region_area }} pixels</p>
+                <p><strong>Total Perimeter:</strong> {{ total_perimeter }} pixels</p>
+                <p><strong>Largest Region Eccentricity:</strong> {{ largest_eccentricity }}</p>
+            </div>
+        </div>
+
+        <!-- Research Disclaimer -->
+        <div class="alert alert-warning">
+
+            <strong>Research prototype:</strong>
+            Input scaling is provisional. The original training
+            preprocessing and class mapping have not been independently
+            verified. This output is not a clinical diagnosis.
+
+        </div>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}
+
+
+
+

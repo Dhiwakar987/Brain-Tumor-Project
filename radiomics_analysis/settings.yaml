@@ -1,0 +1,29 @@
+# PyRadiomics extraction settings (documented + configurable).  The values below are
+# stored with EVERY radiomics run. Nothing is silently resampled or normalised:
+#   * no resampling      (resampledPixelSpacing omitted -> native voxel spacing)
+#   * no normalisation   (normalize: false -> raw MRI intensities)
+#   * fixed bin width    (binWidth: 25, PyRadiomics default; MRI intensities are arbitrary,
+#                         tune/justify for your data. IBSI recommends reporting the choice.)
+#   * 3-D extraction     (force2D: false)
+#   * original image only (no wavelet/LoG filters)
+imageType:
+  Original: {}
+featureClass:
+  shape: []
+  firstorder: []
+  glcm: []
+  glrlm: []
+  glszm: []
+  gldm: []
+  ngtdm: []
+setting:
+  binWidth: 25
+  label: 1
+  normalize: false
+  force2D: false
+  correctMask: false
+  interpolator: sitkBSpline
+  distances: [1]
+  voxelArrayShift: 0
+  minimumROIDimensions: 2
+  minimumROISize: 1

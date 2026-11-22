@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Patient 003 FLAIR 3D Viewer{% endblock %}
+{% block page_title %}Patient 003 - 3D FLAIR Viewer{% endblock %}
+{% block content %}
+<div class="card mb-3">
+  <div class="card-body">
+    <h5>Interactive 3D FLAIR intensity visualization</h5>
+    <p class="text-secondary">
+      Patient 003 ? FLAIR MRI ? Research visualization only.
+      This intensity surface is not a tumour segmentation or diagnosis.
+    </p>
+    <p id="status">Loading MRI volume...</p>
+    <div id="flair3d" style="width:100%;height:600px;"></div>
+  </div>
+</div>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+(async function () {
+  const status = document.getElementById("status");
+  try {
+    const response = await fetch("{{ url_for('patient_flair_3d_data') }}");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load MRI.");
+
+    status.textContent =
+      "Patient " + data.patient + " | FLAIR | Volume: " +
+      data.dimensions.join(" ? ") +
+      " | Display surface threshold: " + data.threshold.toFixed(2);
+
+    const surface = {
+      type: "mesh3d",
+      x: data.x, y: data.y, z: data.z,
+      i: data.i, j: data.j, k: data.k,
+      color: "#55a6d9",
+      opacity: 0.85,
+      name: "FLAIR intensity surface"
+    };
+
+    Plotly.newPlot("flair3d", [surface], {
+      title: "Patient 003 ? FLAIR 3D intensity surface",
+      scene: {
+        xaxis: {title: "X"},
+        yaxis: {title: "Y"},
+        zaxis: {title: "Z"},
+        aspectmode: "data"
+      },
+      margin: {l: 0, r: 0, t: 45, b: 0}
+    }, {responsive: true, displaylogo: false});
+  } catch (error) {
+    status.textContent = "Viewer error: " + error.message;
+  }
+})();
+</script>
+{% endblock %}

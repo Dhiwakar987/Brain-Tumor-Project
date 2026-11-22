@@ -1,0 +1,22 @@
+# Python 3.10 - 3.12. Install PyTorch FIRST with the command from pytorch.org for your CPU/GPU (see docs/installation.md).
+torch>=2.2
+segmentation-models-pytorch>=0.3.3
+timm
+nibabel>=5.0
+SimpleITK>=2.3
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+scikit-learn>=1.3
+scikit-image>=0.22
+matplotlib>=3.8
+plotly>=5.18
+reportlab>=4.0
+openpyxl>=3.1
+Flask>=3.0
+Flask-WTF>=1.2
+PyYAML>=6.0
+psutil>=5.9
+# PyRadiomics: `pip install pyradiomics` fails on some setups (broken 3.1.0 sdist metadata on Python 3.12).
+# Working alternatives are in docs/installation.md (conda-forge package, or GitHub source build).
+pyradiomics

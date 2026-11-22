@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% block title %}Model performance{% endblock %}
+{% block content %}
+<div class="alert alert-warning"><b>Read before interpreting:</b> the figures below aggregate the cases <em>you evaluated in this app</em> (those with an uploaded ground-truth mask). They are <b>not</b> an independent test result: the training/validation/test split of <code>best_unet_brats.pth</code> is unknown, so these cases may have been used to train it. Training performance is not available.</div>
+<div class="row g-3 mb-3">
+ <div class="col-lg-5"><div class="card h-100"><div class="card-header">Checkpoint verification</div><div class="card-body small">
+  {% if ver %}<dl class="row mb-0 gy-1"><dt class="col-6">Architecture</dt><dd class="col-6">{{ ver.architecture.name }} / {{ ver.architecture.encoder_name }}</dd>
+   <dt class="col-6">In / out channels</dt><dd class="col-6">{{ ver.architecture.in_channels }} / {{ ver.architecture.classes }}</dd>
+   <dt class="col-6">Parameters</dt><dd class="col-6">{{ '{:,}'.format(ver.parameters.total) }}</dd>
+   <dt class="col-6">Strict weight load</dt><dd class="col-6">{% if ver.checks.strict_load_ok %}<span class="chip ok">OK ({{ ver.compatibility.n_missing }} missing, {{ ver.compatibility.n_unexpected }} unexpected, {{ ver.compatibility.n_shape_mismatches }} mismatched)</span>{% else %}<span class="chip bad">failed</span>{% endif %}</dd>
+   <dt class="col-6">Preprocessing = training</dt><dd class="col-6"><span class="chip {{ 'ok' if mc.verification.preprocessing_verified_against_training else 'warn' }}">{{ 'verified' if mc.verification.preprocessing_verified_against_training else 'unverified' }}</span></dd>
+   <dt class="col-6">Class mapping</dt><dd class="col-6"><span class="chip {{ 'ok' if mc.verification.class_mapping_verified else 'warn' }}">{{ 'verified' if mc.verification.class_mapping_verified else 'unverified' }}</span></dd>
+   <dt class="col-6">Real-MRI inference</dt><dd class="col-6"><span class="chip {{ 'ok' if ver.checks.real_inference_completed else 'warn' }}">{{ 'completed' if ver.checks.real_inference_completed else 'not verified' }}</span></dd></dl>
+  {% else %}<p class="empty mb-0">Run <code>python scripts/verify_checkpoint.py</code> to create the verification record.</p>{% endif %}</div></div></div>
+ <div class="col-lg-7"><div class="card h-100"><div class="card-header">Segmentation metrics over evaluated cases (n = {{ perf.n_cases }})</div>
+  {% if perf.n_cases %}<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Region</th><th>Dice mean ± SD</th><th>IoU mean</th><th>Precision</th><th>Recall</th><th>Specificity</th><th>HD95 mm (median)</th></tr></thead><tbody>
+  {% for r, m in perf.regions.items() %}<tr><td>{{ r }}</td>
+   <td>{{ '%.3f'|format(m.dice.mean) if m.dice.mean is not none else 'N/A' }}{% if m.dice.sd is not none %} ± {{ '%.3f'|format(m.dice.sd) }}{% endif %} <span class="text-muted">(n={{ m.dice.n }}{% if m.dice.n_undefined %}, {{ m.dice.n_undefined }} undefined{% endif %})</span></td>
+   {% for k in ['iou','precision','recall','specificity'] %}<td>{{ '%.3f'|format(m[k].mean) if m[k].mean is not none else 'N/A' }}</td>{% endfor %}<td>{{ '%.1f'|format(m.hd95_mm.median) if m.hd95_mm.median is not none else 'N/A' }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<div class="card-body"><p class="empty mb-0">No evaluated cases yet. Upload a case with a ground-truth mask and run <em>Evaluation</em>. No numbers are shown until real metrics exist.</p></div>{% endif %}</div></div>
+</div>
+{% if perf.cases %}<div class="card mb-3"><div class="card-header">Per-case Dice</div><div class="card-body"><canvas id="caseChart" height="90"></canvas></div></div>{% endif %}
+<div class="card"><div class="card-header">Metric definitions</div><div class="card-body small">
+ <b>Dice</b> = 2·TP / (2·TP + FP + FN) · <b>IoU</b> = TP / (TP + FP + FN) · <b>Precision</b> = TP / (TP + FP) · <b>Recall</b> = TP / (TP + FN) · <b>Specificity</b> = TN / (TN + FP) · <b>HD95</b> = 95th percentile of symmetric surface distances (mm). Undefined values (empty masks) are reported as N/A, never as 0 or 1. Classification metrics (accuracy, F1, confusion matrix) are unavailable because no classifier exists. A valid generalisation estimate needs a patient-wise held-out cohort – see <code>docs/MODEL_DETAILS.md</code> and <code>experiments/</code>.</div></div>
+{% endblock %}
+{% block scripts %}{% if perf.cases %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>const C={{ perf.cases|tojson }};const ids=[...new Set(C.map(c=>'#'+c.id))];const col={WT:'#12305f',TC:'#14b8a6',ET:'#d97706'};
+new Chart(document.getElementById('caseChart'),{type:'bar',data:{labels:ids,datasets:['WT','TC','ET'].map(r=>({label:r,backgroundColor:col[r],data:ids.map(i=>{const x=C.find(c=>'#'+c.id===i&&c.region===r);return x?x.dice:null;})}))},options:{scales:{y:{min:0,max:1,title:{display:true,text:'Dice'}}}}});</script>{% endif %}{% endblock %}

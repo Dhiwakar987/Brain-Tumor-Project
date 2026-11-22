@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}Reports & export{% endblock %}
+{% block content %}
+{% include "_exam_nav.html" %}
+<div class="row g-3"><div class="col-lg-7"><div class="card"><div class="card-header">PDF report</div><div class="card-body">
+  <p>The report is built from saved results of this examination only (inputs, model/config snapshot, segmentation, radiomics summary, evaluation if available, software versions).</p>
+  <form method="post" action="{{ url_for('report_generate', exam_id=exam.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary"><i class="bi bi-file-earmark-pdf"></i> Generate new report</button></form>
+  {% if exam.reports %}<a class="btn btn-outline-primary" href="{{ url_for('download_report', exam_id=exam.id) }}"><i class="bi bi-download"></i> Download latest PDF</a>{% endif %}
+  <h3 class="h6 mt-4">Generated reports</h3>
+  {% if exam.reports %}<ul class="small">{% for r in exam.reports %}<li>{{ r.created_at[:19]|replace('T',' ') }} UTC &ndash; {{ r.generation_seconds }} s &ndash; SHA-256 {{ r.sha256[:12] }}&hellip;</li>{% endfor %}</ul>{% else %}<p class="empty">No report generated yet.</p>{% endif %}
+</div></div></div>
+<div class="col-lg-5"><div class="card"><div class="card-header">Reproducibility &amp; exports</div><div class="card-body">
+  <p class="small">Download the JSON metadata package (input hashes, checkpoint hash, configuration snapshot, radiomics settings, timings, versions).</p>
+  <div class="fw-semibold small mb-1">Full analysis export (summary, measurements, radiomics, evaluation)</div>
+  <div class="btn-group mb-3"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('export', exam_id=exam.id, format='csv') }}"><i class="bi bi-filetype-csv"></i> CSV</a><a class="btn btn-outline-primary btn-sm" href="{{ url_for('export', exam_id=exam.id, format='xlsx') }}"><i class="bi bi-file-earmark-excel"></i> Excel</a><a class="btn btn-outline-primary btn-sm" href="{{ url_for('export', exam_id=exam.id, format='json') }}"><i class="bi bi-filetype-json"></i> JSON</a></div><br>
+  <a class="btn btn-outline-secondary mb-2" href="{{ url_for('download_metadata', exam_id=exam.id) }}"><i class="bi bi-filetype-json"></i> Reproducibility metadata (JSON)</a><br>
+  {% if exam.segmentation %}<a class="btn btn-outline-secondary" href="{{ url_for('download_prediction', exam_id=exam.id) }}"><i class="bi bi-file-earmark-medical"></i> Prediction NIfTI</a>{% endif %}
+</div></div></div></div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head"><div><h2 class="h4 mb-0">Overview</h2><div class="text-muted small">All figures are computed from this installation's database.</div></div>
+  <a class="btn btn-primary" href="{{ url_for('new_analysis') }}"><i class="bi bi-cloud-arrow-up"></i> New MRI analysis</a></div>
+<div class="row g-3 mb-3">
+  {% for label, val, icon, cls in [('Total analyses', stats.total_exams, 'bi-collection', 'navy'),('Completed', stats.completed, 'bi-check2-circle', ''),('Pending', stats.pending, 'bi-hourglass-split', 'warn'),('Failed / interrupted', stats.failed, 'bi-exclamation-triangle', 'bad')] %}
+  <div class="col-6 col-xl-3"><div class="card stat"><span class="ico {{ cls }}"><i class="bi {{ icon }}"></i></span><div><div class="num">{{ val }}</div><div class="lbl">{{ label }}</div></div></div></div>{% endfor %}
+</div>
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="row g-3">
+      <div class="col-md-7"><div class="card h-100"><div class="card-header">Analysis activity</div><div class="card-body">{% if stats.per_day %}<canvas id="dayChart" height="170"></canvas>{% else %}<p class="empty">No analyses yet.</p>{% endif %}</div></div></div>
+      <div class="col-md-5"><div class="card h-100"><div class="card-header">Completed vs pending</div><div class="card-body">{% if stats.status_counts %}<canvas id="statusChart" height="170"></canvas>{% else %}<p class="empty">No analyses yet.</p>{% endif %}</div></div></div>
+      <div class="col-md-7"><div class="card h-100"><div class="card-header">Predicted whole-tumour volume per analysis (mL)</div><div class="card-body">{% if stats.wt_volumes %}<canvas id="volChart" height="170"></canvas>{% else %}<p class="empty">Appears after a segmentation completes.</p>{% endif %}</div></div></div>
+      <div class="col-md-5"><div class="card h-100"><div class="card-header">Radiomics &amp; reports</div><div class="card-body">
+        <div class="metric mb-2"><div class="k">Radiomics runs</div><div class="v">{{ stats.radiomics_analyses }}</div></div>
+        <div class="metric mb-2"><div class="k">Evaluated vs ground truth</div><div class="v">{{ stats.evaluations }}</div></div>
+        <div class="metric mb-2"><div class="k">PDF reports</div><div class="v">{{ stats.reports }}</div></div>
+        {% if stats.radiomics_by_source %}<canvas id="radChart" height="90"></canvas>{% endif %}</div></div></div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card mb-3"><div class="card-header d-flex justify-content-between">Model information
+      {% if minfo.error is defined %}<span class="chip bad">error</span>{% elif minfo.checkpoint_present %}<span class="chip ok">checkpoint available</span>{% else %}<span class="chip bad">checkpoint missing</span>{% endif %}</div>
+      <div class="card-body small">
+      {% if minfo.error is defined %}<div class="alert alert-danger mb-0">{{ minfo.error }}</div>{% else %}
+      <dl class="row mb-0 gy-1">
+        <dt class="col-5">Model</dt><dd class="col-7">U-Net</dd>
+        <dt class="col-5">Encoder</dt><dd class="col-7">{{ minfo.architecture.split('/')[-1]|trim }}</dd>
+        <dt class="col-5">In / out</dt><dd class="col-7">{{ minfo.in_channels }} channels / {{ minfo.classes }} classes</dd>
+        <dt class="col-5">Checkpoint</dt><dd class="col-7">{% if minfo.checkpoint_present %}{{ minfo.checkpoint_file }}{% else %}<span class="text-danger">not found – see README</span>{% endif %}</dd>
+        {% if minfo.checkpoint_sha256 %}<dt class="col-5">SHA-256</dt><dd class="col-7">{{ minfo.checkpoint_sha256[:16] }}…</dd>{% endif %}
+        <dt class="col-5">Device</dt><dd class="col-7">{{ minfo.device }}</dd>
+        <dt class="col-5">Segmentation</dt><dd class="col-7">{% if minfo.checkpoint_present %}<span class="chip teal">ready</span>{% else %}<span class="chip bad">unavailable</span>{% endif %}</dd>
+        <dt class="col-5">Classification</dt><dd class="col-7"><span class="chip">none installed</span></dd>
+        <dt class="col-5">Explainability</dt><dd class="col-7"><span class="chip">not implemented</span></dd>
+        <dt class="col-5">Preprocessing verified</dt><dd class="col-7">{% if minfo.verification_flags.preprocessing_verified_against_training %}<span class="chip ok">yes</span>{% else %}<span class="chip warn">unverified</span>{% endif %}</dd>
+      </dl>{% endif %}</div></div>
+    <div class="card"><div class="card-header">Recent activity</div><ul class="list-group list-group-flush small">
+      {% for ev in stats.recent_events %}<li class="list-group-item">{{ ev.created_at[:16]|replace('T',' ') }} · #{{ ev.examination_id }} · {{ ev.event|replace('_',' ') }}</li>{% else %}<li class="list-group-item empty">No activity yet.</li>{% endfor %}</ul></div>
+  </div>
+  <div class="col-12"><div class="card"><div class="card-header d-flex justify-content-between">Recent analyses <a href="{{ url_for('history') }}" class="small">View all</a></div>
+    <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>ID</th><th>Case label</th><th>Date (UTC)</th><th>Status</th><th>Results</th><th></th></tr></thead><tbody>
+    {% for e in recent %}<tr><td>#{{ e.id }}</td><td>{{ e.patient_label or '–' }}</td><td>{{ e.created_at[:16]|replace('T',' ') }}</td>
+      <td><span class="chip {{ 'ok' if e.status=='segmented' else ('bad' if e.status in ['failed','interrupted'] else 'warn') }}">{{ e.status }}</span></td>
+      <td class="small text-muted">{% if e.status=='segmented' %}segmentation{% endif %}{% if e.n_reports %} · {{ e.n_reports }} report(s){% endif %}{% if e.has_ground_truth %} · ground truth{% endif %}</td>
+      <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('results', exam_id=e.id) }}">Open</a></td></tr>
+    {% else %}<tr><td colspan="6" class="empty">No analyses yet. <a href="{{ url_for('new_analysis') }}">Start one</a>.</td></tr>{% endfor %}</tbody></table></div></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+const S={{ stats.status_counts|tojson }}, D={{ stats.per_day|tojson }}, V={{ stats.wt_volumes|tojson }}, R={{ stats.radiomics_by_source|tojson }};
+const T='#14b8a6', N='#12305f', P=[N,T,'#d97706','#dc2626','#6a7a90'];
+const $=id=>document.getElementById(id);
+if($('statusChart')) new Chart($('statusChart'),{type:'doughnut',data:{labels:Object.keys(S),datasets:[{data:Object.values(S),backgroundColor:P}]},options:{plugins:{legend:{position:'bottom'}}}});
+if($('dayChart')){const d=D.slice().reverse();new Chart($('dayChart'),{type:'bar',data:{labels:d.map(x=>x.day),datasets:[{label:'Analyses',data:d.map(x=>x.n),backgroundColor:T,borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});}
+if($('volChart')){const v=V.slice().reverse();new Chart($('volChart'),{type:'bar',data:{labels:v.map(x=>'#'+x.id+(x.label?' '+x.label:'')),datasets:[{label:'WT volume (mL)',data:v.map(x=>x.wt_ml),backgroundColor:N,borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'mL'}}}}});}
+if($('radChart')) new Chart($('radChart'),{type:'bar',data:{labels:Object.keys(R).map(k=>k.replace('_',' ')),datasets:[{data:Object.values(R),backgroundColor:T}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
+</script>
+{% endblock %}

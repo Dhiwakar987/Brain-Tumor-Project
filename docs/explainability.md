@@ -1,0 +1,2 @@
+# Interpretability
+Not implemented. Grad-CAM is defined for classification; for a segmentation U-Net it needs a per-class target (e.g. summed logits of a region) and a choice of layer (e.g. last decoder block), and the resulting maps are not evidence of correctness or causality. Rather than ship an unvalidated implementation, the project provides the standard visual-review workflow (MRI / mask / overlay with opacity control and a review status flag). Listed as future work.

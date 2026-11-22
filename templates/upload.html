@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% block title %}New MRI analysis{% endblock %}
+{% block content %}
+<div class="alert alert-warning mb-4">
+    <h5>3D MRI Dataset Required</h5>
+    <p class="mb-2">
+        This page accepts four separate 3D MRI files in NIfTI format
+        (.nii or .nii.gz): T1, T1ce, T2 and FLAIR.
+    </p>
+    <p class="mb-2">
+        The dataset currently available in this project contains
+        prepared 2D .npy slices, not the original 3D MRI files.
+    </p>
+    <p class="mb-0">
+        To test the working segmentation functionality, use the
+        <a href="{{ url_for('demo_2d') }}">2D MRI Demo</a>.
+    </p>
+</div>
+<div class="row g-3">
+<div class="col-xl-9">
+<div id="errorBox" class="alert alert-danger d-none" role="alert"></div>
+<form id="uploadForm" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-3">
+    {% for key, label, desc in [('t1','T1','Native T1-weighted'),('t1ce','T1ce','Post-contrast T1'),('t2','T2','T2-weighted'),('flair','FLAIR','Fluid-attenuated inversion recovery')] %}
+    <div class="col-md-6 col-xxl-3"><div class="up-card" data-role="{{ key }}">
+      <input type="file" name="{{ key }}" accept=".nii,.gz" aria-label="{{ label }} file" required>
+      <div class="ico"><i class="bi bi-cloud-arrow-up"></i></div><h3>{{ label }} <span class="text-danger">*</span></h3><div class="sub">{{ desc }}</div>
+      <div class="sub mb-2">.nii / .nii.gz · drag &amp; drop or browse</div>
+      <span class="btn btn-sm btn-outline-primary">Browse</span>
+      <div class="fname mt-2">No file selected</div><div class="sub fsize"></div>
+      <div class="progress mt-2 d-none"><div class="progress-bar" style="width:0%"></div></div>
+      <div class="state mt-1 text-muted">Waiting for file</div></div></div>
+    {% endfor %}
+    <div class="col-md-6"><div class="up-card" data-role="ground_truth">
+      <input type="file" name="ground_truth" accept=".nii,.gz" aria-label="Ground truth file">
+      <div class="ico"><i class="bi bi-bullseye"></i></div><h3>Ground-truth mask <span class="chip">optional</span></h3>
+      <div class="sub mb-2">BraTS labels 0, 1, 2, 4 · enables Dice/IoU and the three-panel comparison</div>
+      <span class="btn btn-sm btn-outline-primary">Browse</span><div class="fname mt-2">No file selected</div><div class="sub fsize"></div>
+      <div class="progress mt-2 d-none"><div class="progress-bar" style="width:0%"></div></div><div class="state mt-1 text-muted">Without it, analysis runs but no evaluation metrics are shown</div></div></div>
+    <div class="col-md-6"><div class="card h-100"><div class="card-body">
+      <label class="form-label fw-semibold" for="patient_label">De-identified case label <span class="text-muted fw-normal">(optional)</span></label>
+      <input class="form-control" type="text" id="patient_label" name="patient_label" maxlength="60" placeholder="e.g. BraTS20_Training_001">
+      <div class="form-text">Never enter patient names, IDs or dates of birth.</div>
+      <div class="progress my-3 d-none" id="progWrap"><div class="progress-bar" id="progBar" style="width:0%">0%</div></div>
+      <button class="btn btn-primary btn-lg w-100 mt-2" id="submitBtn" type="submit"><i class="bi bi-shield-check"></i> Upload &amp; validate</button>
+      <div id="statusText" class="small text-muted mt-2"></div></div></div></div>
+  </div>
+</form></div>
+<div class="col-xl-3"><div class="card"><div class="card-header">Instructions</div><div class="card-body small">
+  <ol class="ps-3 mb-3"><li>Select all four co-registered sequences (T1, T1ce, T2, FLAIR).</li><li>Optionally add the expert segmentation mask.</li><li>Press <em>Upload &amp; validate</em>. The server checks file type, readability, shape, affine, orientation, spacing and finite values.</li><li>Run the U-Net on the next page.</li></ol>
+  <div class="alert alert-info small mb-2">All sequences must share the same voxel grid. Misaligned scans are rejected, never silently resampled.</div>
+  <p class="mb-0 text-muted">Limit {{ max_upload_mb }} MB in total. Use de-identified or public data only.</p></div></div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.MAX_MB={{ max_upload_mb }};window.ALLOWED={{ extensions|tojson }};</script><script src="{{ url_for('static', filename='js/upload.js') }}"></script>{% endblock %}
+

@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Explainable AI{% endblock %}
+{% block content %}
+<div class="card mb-3"><div class="card-body"><div class="d-flex align-items-center gap-2 mb-2"><h2 class="h5 mb-0">Explainable AI</h2><span class="chip warn">not implemented</span></div>
+<p>No heatmaps are displayed because none can be produced honestly with the models in this project.</p>
+<table class="table table-sm"><thead><tr><th>Method</th><th>Applies to</th><th>Status</th><th>Why</th></tr></thead><tbody>
+<tr><td>Grad-CAM / Grad-CAM++</td><td>Classification CNN (e.g. ResNet50)</td><td><span class="chip warn">unavailable</span></td><td>needs a trained classifier; none exists. Target layer would be the last convolutional block.</td></tr>
+<tr><td>Grad-CAM-style maps for the U-Net</td><td>Segmentation</td><td><span class="chip">not implemented</span></td><td>Needs a per-class scalar target (e.g. summed WT logits) and a layer choice; it has not been designed or validated here, so none is shown.</td></tr>
+<tr><td>TreeSHAP</td><td>Tree model on radiomics features</td><td><span class="chip warn">unavailable</span></td><td>needs a genuine trained XGBoost/RandomForest with documented training data.</td></tr></tbody></table>
+- Visual review of MRI, ground truth and AI prediction through the 2D comparison and overlay views.
+<p class="small text-muted mt-3 mb-0">Even a genuine activation map is not proof of correctness, causality or clinical validity.</p></div></div>
+{% endblock %}
+
+

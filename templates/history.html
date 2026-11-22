@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Analysis history{% endblock %}
+{% block content %}
+<div class="page-head"><div class="text-muted small">Stored in this installation's database. Deleting removes records and files.</div><a class="btn btn-primary btn-sm" href="{{ url_for('new_analysis') }}">New MRI analysis</a></div>
+{% if exams %}
+<div class="card"><div class="table-responsive"><table class="table table-hover mb-0 align-middle"><thead><tr><th>ID</th><th>Date (UTC)</th><th>Label</th><th>Status</th><th>Model</th><th>Ground truth</th><th>Reviewed</th><th>Reports</th><th></th></tr></thead><tbody>
+{% for e in exams %}<tr><td>{{ e.id }}</td><td>{{ e.created_at[:16]|replace('T',' ') }}</td><td>{{ e.patient_label or '-' }}</td><td><span class="chip {{ 'ok' if e.status=='segmented' else ('bad' if e.status in ['failed','interrupted'] else 'warn') }}">{{ e.status }}</span></td><td>{{ e.model_version or '-' }}</td><td>{{ 'yes' if e.has_ground_truth else 'no' }}</td><td>{{ e.review_status.replace('_',' ') }}</td><td>{{ e.n_reports }}</td>
+<td class="text-nowrap"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('history_detail', exam_id=e.id) }}">Open</a>
+{% if e.n_reports %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('download_report', exam_id=e.id) }}">PDF</a>{% endif %}
+<form class="d-inline delete-form" method="post" action="{{ url_for('history_delete', exam_id=e.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger" type="submit">Delete</button></form></td></tr>{% endfor %}
+</tbody></table></div></div>
+{% else %}<p class="empty">No examinations yet. <a href="{{ url_for('new_analysis') }}">Upload one</a>.</p>{% endif %}
+{% endblock %}

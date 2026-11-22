@@ -1,0 +1,5 @@
+# Recommended for Windows + Python 3.11 (NOT tested on Windows by the author of this build).
+# Pinning NumPy < 2 avoids "numpy.core.multiarray failed to import" caused by a compiled package (e.g. PyRadiomics)
+# built against NumPy 1.x being imported under NumPy 2.x. Install PyTorch first (see README).
+-r requirements.txt
+numpy>=1.26,<2.0

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Patient 055 3D Demo{% endblock %}
+{% block page_title %}Patient 055 ? 3D Stack Demonstration{% endblock %}
+
+{% block content %}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h5 class="mb-1">3D tumour-label visualization</h5>
+        <p class="text-secondary mb-0">
+          Demonstration generated from 149 ordered 2D image slices and their matching masks.
+        </p>
+      </div>
+      <span class="badge text-bg-warning">Research demonstration</span>
+    </div>
+    <hr>
+    <div class="row g-3">
+      <div class="col-md-4"><strong>Image stack</strong><br>149 ? 4 ? 240 ? 240</div>
+      <div class="col-md-4"><strong>Mask stack</strong><br>149 ? 240 ? 240</div>
+      <div class="col-md-4"><strong>Mask labels</strong><br>0, 1, 2, 3</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" id="label1" checked>
+        <span class="form-check-label">Label 1</span>
+      </label>
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" id="label2" checked>
+        <span class="form-check-label">Label 2</span>
+      </label>
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" id="label3" checked>
+        <span class="form-check-label">Label 3</span>
+      </label>
+      <button class="btn btn-outline-secondary btn-sm" id="reset3d">
+        Reset camera
+      </button>
+    </div>
+
+    <div id="patient055Plot" style="width:100%;height:620px;"></div>
+    <div id="patient055Status" class="text-secondary small">
+      Loading 3D surfaces...
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-info">
+  <strong>Data limitation:</strong>
+  This is a voxel-stack visualization made from preprocessed 2D slices.
+  The original modality names, physical voxel spacing and anatomical orientation
+  have not been verified. Labels are shown by number, not by clinical meaning.
+  This is not a verified physical 3D MRI reconstruction or a new model prediction.
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+(() => {
+  const plot = document.getElementById("patient055Plot");
+  const status = document.getElementById("patient055Status");
+  const colors = {1: "#e05252", 2: "#e5b83d", 3: "#438bd6"};
+  let traces = [];
+
+  function updateVisibility() {
+    const visibility = [1, 2, 3].map(
+      id => document.getElementById("label" + id).checked
+    );
+    Plotly.restyle(plot, {visible: visibility});
+  }
+
+  async function loadDemo() {
+    try {
+      const response = await fetch("{{ url_for('demo_3d_patient_055_data') }}");
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Could not load the 3D data.");
+      }
+
+      traces = result.surfaces.map(surface => ({
+        type: "mesh3d",
+        name: "Label " + surface.label,
+        x: surface.x,
+        y: surface.y,
+        z: surface.z,
+        i: surface.i,
+        j: surface.j,
+        k: surface.k,
+        color: colors[surface.label],
+        opacity: 0.85,
+        flatshading: true,
+        visible: true,
+        hovertemplate:
+          "Label " + surface.label +
+          "<br>Column: %{x:.1f}" +
+          "<br>Row: %{y:.1f}" +
+          "<br>Slice: %{z:.1f}<extra></extra>"
+      }));
+
+      await Plotly.newPlot(plot, traces, {
+        title: "Patient 055 ? 3D mask surfaces",
+        paper_bgcolor: "rgba(0,0,0,0)",
+        scene: {
+          xaxis: {title: "Image column (voxel index)"},
+          yaxis: {title: "Image row (voxel index)"},
+          zaxis: {title: "Slice index"},
+          aspectmode: "data"
+        },
+        margin: {l: 0, r: 0, t: 50, b: 0},
+        legend: {orientation: "h"}
+      }, {
+        responsive: true,
+        displaylogo: false
+      });
+
+      [1, 2, 3].forEach(id => {
+        document.getElementById("label" + id)
+          .addEventListener("change", updateVisibility);
+      });
+
+      document.getElementById("reset3d").addEventListener("click", () => {
+        Plotly.relayout(plot, {"scene.camera": {
+          eye: {x: 1.6, y: 1.6, z: 1.3}
+        }});
+      });
+
+      const counts = result.surfaces.map(
+        s => "Label " + s.label + ": " + s.voxels.toLocaleString() + " voxels"
+      );
+
+      status.textContent =
+        "Loaded successfully ? " + result.dimensions.join(" ? ") +
+        " ? " + counts.join(" ? ");
+
+    } catch (error) {
+      status.textContent = "3D viewer error: " + error.message;
+      status.classList.add("text-danger");
+    }
+  }
+
+  loadDemo();
+})();
+</script>
+{% endblock %}

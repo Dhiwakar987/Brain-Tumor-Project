@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="hero p-4 p-md-5 mb-4">
+  <h1 class="display-6 fw-bold">Web-Based Brain Tumor Segmentation and Radiomics Analysis Using Deep Learning</h1>
+  <p class="lead mb-3">An end-to-end research platform: multimodal MRI validation &rarr; U-Net (ResNet34) segmentation &rarr; PyRadiomics features &rarr; optional reference-based evaluation &rarr; reproducible PDF report.</p>
+  <a class="btn btn-primary btn-lg me-2" href="{{ url_for('new_analysis') }}"><i class="bi bi-cloud-upload"></i> Start analysis</a>
+  <a class="btn btn-outline-light btn-lg" href="{{ url_for('dashboard') }}">Open dashboard</a>
+</div>
+<div class="alert alert-warning"><strong>Research prototype.</strong> Not a medical device; no clinical validation has been performed.</div>
+<h2 class="h4">Workflow</h2>
+<div class="row g-3 mb-4">
+  {% for n, t, d in [(1,'Upload','T1, T1ce, T2, FLAIR NIfTI (+ optional ground-truth mask); strict validation of format, shape, affine, orientation.'),(2,'Segment','Slice-wise U-Net/ResNet34 inference; label mapping to BraTS labels; WT/TC/ET regions.'),(3,'Radiomics','PyRadiomics: shape, first-order, GLCM, GLRLM, GLSZM, GLDM, NGTDM per region and modality.'),(4,'Evaluate','Dice, IoU, precision, recall, specificity, HD95 &mdash; only with a supplied reference mask.'),(5,'Report','PDF report, CSV/Excel export and reproducibility metadata (JSON).')] %}
+  <div class="col-md"><div class="card h-100 shadow-sm"><div class="card-body"><span class="step-badge mb-2">{{ n }}</span><h3 class="h6">{{ t }}</h3><p class="small mb-0">{{ d|safe }}</p></div></div></div>
+  {% endfor %}
+</div>
+<div class="row g-3">
+  <div class="col-md-4"><div class="card h-100"><div class="card-body"><h3 class="h6">Supported MRI modalities</h3><ul class="mb-0"><li>T1</li><li>T1ce (post-contrast)</li><li>T2</li><li>FLAIR</li></ul></div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-body"><h3 class="h6">Main features</h3><ul class="mb-0 small"><li>Interactive axial/coronal/sagittal viewer</li><li>Region selection WT / TC / ET</li><li>History with deletion + SQLite storage</li><li>Reproducibility metadata export</li></ul></div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-body"><h3 class="h6">Technology stack</h3><p class="small mb-0">Flask, PyTorch, segmentation-models-pytorch, NiBabel, SimpleITK, PyRadiomics, SciPy, Pandas, ReportLab, SQLite, Bootstrap 5, Plotly.js, Chart.js.</p></div></div></div>
+</div>
+{% endblock %}

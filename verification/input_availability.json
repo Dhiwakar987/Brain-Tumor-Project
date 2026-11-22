@@ -1,0 +1,44 @@
+{
+  "created_utc": "2026-11-14T03:24:19.290262+00:00",
+  "items": {
+    "checkpoint": {
+      "found": true,
+      "name": "best_unet_brats.pth",
+      "sha256": "a15086d57e073b77ef9e14221f9f614be4f06b76a4a8145e803c2f2935f5e32b"
+    },
+    "model_config": {
+      "found": true,
+      "verification_flags": {
+        "preprocessing_verified_against_training": false,
+        "class_mapping_verified": false,
+        "modality_order_verified": false,
+        "training_code_supplied": false
+      }
+    },
+    "training_code": {
+      "found": false,
+      "note": "Not supplied unless flag set to true in model_config.yaml"
+    },
+    "preprocessing_source": {
+      "found": false,
+      "note": "Training preprocessing code not supplied; preprocessing is configurable and UNVERIFIED"
+    },
+    "class_mapping": {
+      "found": true,
+      "verified": false,
+      "mapping": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 4
+      }
+    },
+    "dataset": {
+      "found": false,
+      "configured": false
+    },
+    "reference_masks": {
+      "found": false
+    }
+  }
+}

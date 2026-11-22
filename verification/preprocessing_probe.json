@@ -1,0 +1,119 @@
+{
+  "verdicts": [
+    "Preprocessing: NOT DECIDED (best WT Dice 0.899, margin to runner-up 0.000). Do not configure from this probe.",
+    "Channel order: CLEAR winner ((0, 1, 2, 3)), margin 0.143 in WT Dice"
+  ],
+  "n_slices_used": 40,
+  "mask_interpretation": "labels [0, 1, 2, 3] used directly as class indices",
+  "stage1_preprocessing_candidates": [
+    {
+      "preprocessing": "div255",
+      "channel_order": "as stored (0,1,2,3)",
+      "wt_dice": 0.8985488710655225,
+      "class1_dice": 0.5708383256503903,
+      "class2_dice": 0.841447619564962,
+      "class3_dice": 0.7754300331792428
+    },
+    {
+      "preprocessing": "zscore_nonzero_per_slice",
+      "channel_order": "as stored (0,1,2,3)",
+      "wt_dice": 0.7167618919194292,
+      "class1_dice": 0.13004674820222792,
+      "class2_dice": 0.2683264269445985,
+      "class3_dice": 0.412760403827957
+    },
+    {
+      "preprocessing": "div_slice_max",
+      "channel_order": "as stored (0,1,2,3)",
+      "wt_dice": 0.8985488710655225,
+      "class1_dice": 0.5708383256503903,
+      "class2_dice": 0.841447619564962,
+      "class3_dice": 0.7754300331792428
+    },
+    {
+      "preprocessing": "raw_0_255 (control, expected bad)",
+      "channel_order": "as stored (0,1,2,3)",
+      "wt_dice": 0.1192389558818833,
+      "class1_dice": 0.025258517547792923,
+      "class2_dice": 0.027646779375959024,
+      "class3_dice": 0.08076649701074028
+    }
+  ],
+  "stage2_channel_orders_for_best_preprocessing": [
+    {
+      "preprocessing": "div255",
+      "channel_order": "(0, 1, 2, 3)",
+      "wt_dice": 0.8985488710655225,
+      "class1_dice": 0.5708383256503903,
+      "class2_dice": 0.841447619564962,
+      "class3_dice": 0.7754300331792428
+    },
+    {
+      "preprocessing": "div255",
+      "channel_order": "(1, 0, 2, 3)",
+      "wt_dice": 0.7550583620524952,
+      "class1_dice": 0.250934863184739,
+      "class2_dice": 0.6226376206427299,
+      "class3_dice": 0.08749840500195338
+    },
+    {
+      "preprocessing": "div255",
+      "channel_order": "(0, 2, 1, 3)",
+      "wt_dice": 0.7361658407101164,
+      "class1_dice": 0.025808243650142098,
+      "class2_dice": 0.27946754468697393,
+      "class3_dice": 0.20032207731422108
+    },
+    {
+      "preprocessing": "div255",
+      "channel_order": "(0, 1, 3, 2)",
+      "wt_dice": 0.7239144517004679,
+      "class1_dice": 0.39483374688133777,
+      "class2_dice": 0.6280652264514449,
+      "class3_dice": 0.6311105433093045
+    },
+    {
+      "preprocessing": "div255",
+      "channel_order": "(1, 2, 0, 3)",
+      "wt_dice": 0.6096355640473213,
+      "class1_dice": 0.012039888376682207,
+      "class2_dice": 0.2321987806911987,
+      "class3_dice": 0.09232944875017836
+    },
+    {
+      "preprocessing": "div255",
+      "channel_order": "(0, 3, 2, 1)",
+      "wt_dice": 0.5992779861446441,
+      "class1_dice": 0.0844996117345692,
+      "class2_dice": 0.013107909408919826,
+      "class3_dice": 0.2407618292473525
+    }
+  ],
+  "confusion_rows=mask_class_cols=predicted_class": [
+    [
+      2248364,
+      11,
+      1701,
+      171
+    ],
+    [
+      544,
+      6145,
+      945,
+      476
+    ],
+    [
+      4184,
+      231,
+      31860,
+      243
+    ],
+    [
+      238,
+      183,
+      348,
+      8356
+    ]
+  ],
+  "warning": "Diagnostic on training-format slices (likely seen in training); not an accuracy estimate. Pick the config only if one candidate is clearly better; if several tie, the probe cannot decide."
+}

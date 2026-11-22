@@ -1,0 +1,105 @@
+(function () {
+  const $ = id => document.getElementById(id);
+  // ---------- segmentation job control ----------
+  const segBtn = $('segmentBtn');
+  const setStatus = s => {
+    if ($('examStatusChip')) $('examStatusChip').textContent = s.exam_status;
+    $('stageText').textContent = s.job ? ('stage: ' + (s.job.stage || '…')) : '';
+    const msg = (s.job && s.job.error) || s.error;
+    if (msg && s.exam_status === 'failed') { $('errBox').textContent = msg; $('errBox').classList.remove('d-none'); }
+  };
+  if (segBtn) segBtn.addEventListener('click', async () => {
+    segBtn.disabled = true; const r = await postJSON(segBtn.dataset.url);
+    if (!r.data.ok) { alert(r.data.error || 'Could not start'); segBtn.disabled = false; return; }
+    const f = await pollStatus(window.STATUS_URL, setStatus); if (f.job && f.job.status === 'completed') location.reload(); else segBtn.disabled = false;
+  });
+  fetch(window.STATUS_URL).then(r => r.json()).then(s => { if (s.job && ['queued', 'running'].includes(s.job.status)) { if (segBtn) segBtn.disabled = true; pollStatus(window.STATUS_URL, setStatus).then(f => { if (f.job.status === 'completed') location.reload(); }); } });
+  if (!window.HAS_SEG) return;
+
+  const CS_ALL = [[0, '#e53935'], [0.3333, '#e53935'], [0.3334, '#fdd835'], [0.6666, '#fdd835'], [0.6667, '#1e88e5'], [1, '#1e88e5']], CS_ONE = [[0, '#00e676'], [1, '#00e676']];
+  const cfg = { responsive: true, displaylogo: false, scrollZoom: false, modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'] };
+  const layout2d = (d, withAxes) => ({ margin: { l: 0, r: 0, t: 0, b: withAxes ? 34 : 0 }, dragmode: 'pan', paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220',
+    xaxis: { visible: !!withAxes, title: withAxes ? { text: d.xlabel, font: { color: '#9fb0c9', size: 11 } } : undefined, showticklabels: false, showgrid: false, zeroline: false, constrain: 'domain' },
+    yaxis: { visible: !!withAxes, title: withAxes ? { text: d.ylabel, font: { color: '#9fb0c9', size: 11 } } : undefined, showticklabels: false, showgrid: false, zeroline: false, scaleanchor: 'x', scaleratio: 1 / d.aspect } });
+  const heat = (z, region, opacity) => ({ z, type: 'heatmap', zmin: 1, zmax: region === 'ALL' ? 3 : 1, colorscale: region === 'ALL' ? CS_ALL : CS_ONE, showscale: false, opacity, hovertemplate: 'class %{z}<extra></extra>', hoverongaps: false });
+  const gray = z => ({ z, type: 'heatmap', colorscale: 'Greys', showscale: false, hoverinfo: 'skip' });
+  const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+  // ---------- 2D viewer ----------
+  const el = $('viewer'); let cache = null, resetIdx = true, view = 'axial';
+  async function load() {
+    const q = new URLSearchParams({ modality: $('vModality').value, view, region: $('vRegion').value, source: $('vSource').value });
+    if (!resetIdx) q.set('index', $('vSlice').value);
+    const r = await fetch(el.dataset.url + '?' + q); if (!r.ok) { el.innerHTML = '<div class="p-3 text-danger">Could not load slice.</div>'; return; }
+    cache = await r.json(); $('vSlice').max = cache.n_slices - 1; $('vSlice').value = cache.index; resetIdx = false; draw(true);
+  }
+  function draw(relayout) {
+    if (!cache) return; $('sliceLabel').textContent = cache.index + ' / ' + (cache.n_slices - 1); $('opLabel').textContent = $('vOpacity').value;
+    $('orientInfo').textContent = 'Image orientation (array axes): ' + cache.orientation + ' · ' + cache.xlabel + ' (horizontal), ' + cache.ylabel + ' (vertical)';
+    const mode = $('vMode').value, region = $('vRegion').value, tr = [];
+    if (mode !== 'mask') tr.push(gray(cache.image));
+    if (mode !== 'mri' && cache.mask) tr.push(heat(cache.mask, region, mode === 'mask' ? 1 : parseFloat($('vOpacity').value)));
+    Plotly.react(el, tr, relayout ? layout2d(cache, true) : el.layout, cfg);
+  }
+  function zoomBy(f) { const xa = el._fullLayout.xaxis.range, ya = el._fullLayout.yaxis.range, cx = (xa[0] + xa[1]) / 2, cy = (ya[0] + ya[1]) / 2, hx = (xa[1] - xa[0]) / 2 / f, hy = (ya[1] - ya[0]) / 2 / f;
+    Plotly.relayout(el, { 'xaxis.range': [cx - hx, cx + hx], 'yaxis.range': [cy - hy, cy + hy] }); }
+  $('zIn').onclick = () => zoomBy(1.4); $('zOut').onclick = () => zoomBy(1 / 1.4); $('zReset').onclick = () => Plotly.relayout(el, { 'xaxis.autorange': true, 'yaxis.autorange': true });
+  $('vViewGroup').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; view = b.dataset.view; $('vViewGroup').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); resetIdx = true; load(); });
+  ['vModality', 'vRegion', 'vSource'].forEach(i => $(i).addEventListener('change', load)); $('vMode').addEventListener('change', () => draw(false));
+  $('vOpacity').addEventListener('input', () => draw(false));
+  const lazyLoad = debounce(load, 110);
+  $('vSlice').addEventListener('input', () => { $('sliceLabel').textContent = $('vSlice').value; lazyLoad(); });
+  el.addEventListener('wheel', e => { e.preventDefault(); const s = $('vSlice'); s.value = Math.max(0, Math.min(+s.max, +s.value + (e.deltaY > 0 ? 1 : -1))); lazyLoad(); }, { passive: false });
+  load();
+
+  // ---------- three-panel comparison ----------
+  const cd = $('cmpData'); let cview = 'axial', cc = null, cReset = true, cLoaded = false;
+  async function cload() {
+    const q = new URLSearchParams({ modality: $('cModality').value, view: cview, region: $('cRegion').value }); if (!cReset) q.set('index', $('cSlice').value);
+    const r = await fetch(cd.dataset.url + '?' + q); if (!r.ok) return; cc = await r.json(); $('cSlice').max = cc.n_slices - 1; $('cSlice').value = cc.index; cReset = false; cdraw(true);
+  }
+  function cdraw(rel) {
+    if (!cc) return; $('cSliceLabel').textContent = cc.index + ' / ' + (cc.n_slices - 1); const op = parseFloat($('cOpacity').value);
+    const mk = (id, mask) => { const tr = [gray(cc.image)]; if (mask) tr.push(heat(mask, cc.region, op)); Plotly.react($(id), tr, layout2d(cc, false), cfg); };
+    mk('cmpMri', null); mk('cmpPred', cc.prediction); if (cc.ground_truth) mk('cmpGt', cc.ground_truth);
+  }
+  $('cViewGroup').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; cview = b.dataset.view; $('cViewGroup').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); cReset = true; cload(); });
+  ['cModality', 'cRegion'].forEach(i => $(i).addEventListener('change', cload)); $('cOpacity').addEventListener('input', () => cdraw(false));
+  const clazy = debounce(cload, 110); $('cSlice').addEventListener('input', () => { $('cSliceLabel').textContent = $('cSlice').value; clazy(); });
+  document.querySelector('[data-bs-target="#tabCmp"]').addEventListener('shown.bs.tab', () => { if (!cLoaded) { cLoaded = true; cload(); } else ['cmpMri', 'cmpGt', 'cmpPred'].forEach(i => { try { Plotly.Plots.resize($(i)); } catch (e) {} }); });
+
+  // ---------- 3-D ----------
+  const p3 = $('plot3d'); let mesh = null, loaded3 = false;
+  const COL = { 'NCR/NET (label 1)': '#e53935', 'Edema (label 2)': '#fdd835', 'Enhancing (label 4)': '#1e88e5' };
+  async function load3d() {
+    p3.innerHTML = '<div class="p-4 text-light">Building 3-D surfaces from the MRI and segmentation…</div>';
+    const r = await fetch(p3.dataset.url + '?modality=' + $('m3Modality').value); const d = await r.json();
+    if (!r.ok) { p3.innerHTML = '<div class="p-4 text-warning">' + (d.error || 'Unavailable') + '</div>'; return; }
+    mesh = d; $('m3Note').textContent = (d.notes || []).join('; '); draw3d();
+  }
+  function draw3d() {
+    const tr = [];
+    if (mesh.brain) tr.push({ type: 'mesh3d', ...mesh.brain, color: '#b8c4d6', opacity: parseFloat($('brainOpacity').value), name: 'Brain surface', showlegend: true, visible: $('brainToggle').checked, flatshading: false, lighting: { ambient: .7, diffuse: .6 }, hoverinfo: 'skip' });
+    Object.entries(mesh.regions).forEach(([n, m]) => tr.push({ type: 'mesh3d', ...m, color: COL[n], opacity: n.startsWith('Edema') ? 0.45 : 1, name: n, showlegend: true, visible: n.startsWith('Edema') ? $('edemaToggle').checked : true, hoverinfo: 'name', lighting: { ambient: .5, diffuse: .8, specular: .3 } }));
+    if (!tr.length) { p3.innerHTML = '<div class="p-4 text-warning">No surfaces could be computed (empty prediction?).</div>'; return; }
+    Plotly.react(p3, tr, { margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: '#0b1220', legend: { font: { color: '#dbe4f3' }, x: 0, y: 1 },
+      scene: { aspectmode: 'data', xaxis: { title: 'mm', color: '#9fb0c9', gridcolor: '#1d2a44', backgroundcolor: '#0b1220' }, yaxis: { title: 'mm', color: '#9fb0c9', gridcolor: '#1d2a44', backgroundcolor: '#0b1220' }, zaxis: { title: 'mm', color: '#9fb0c9', gridcolor: '#1d2a44', backgroundcolor: '#0b1220' } } }, { responsive: true, displaylogo: false });
+  }
+  const upd3 = () => { if (mesh) draw3d(); };
+  $('brainToggle').onchange = upd3; $('edemaToggle').onchange = upd3; $('brainOpacity').oninput = upd3; $('m3Modality').onchange = load3d;
+  $('m3Reset').onclick = () => Plotly.relayout(p3, { 'scene.camera': { eye: { x: 1.5, y: 1.5, z: 1 } } });
+  document.querySelector('[data-bs-target="#tab3d"]').addEventListener('shown.bs.tab', () => { if (!loaded3) { loaded3 = true; load3d(); } else Plotly.Plots.resize(p3); });
+
+  // ---------- measurements panel ----------
+  let meas = null;
+  const f = (v, d = 1) => v === null || v === undefined ? '–' : Number(v).toFixed(d);
+  function drawMeas() {
+    if (!meas) return; const m = meas.predicted[$('mRegion').value]; const ext = m.bbox_extent_mm;
+    const cards = [['Volume', f(m.volume_mm3, 0), 'mm³'], ['Volume', f(m.volume_ml, 2), 'mL'], ['Voxel count', m.voxel_count, 'voxels'], ['Voxel size', f(m.voxel_volume_mm3, 2), 'mm³ / voxel'],
+      ['Surface area', f(m.surface_area_mm2, 0), 'mm²'], ['Sphericity', f(m.sphericity, 3), ''], ['Max 3-D diameter', f(m.max_3d_diameter_mm, 1), 'mm'], ['Surface / volume', f(m.surface_to_volume_ratio_per_mm, 3), '1/mm'],
+      ['Extent (axes 0·1·2)', ext ? ext.map(v => v.toFixed(0)).join(' × ') : '–', 'mm']];
+    $('measBox').innerHTML = cards.map(c => '<div class="col-6"><div class="metric"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div><div class="u">' + c[2] + '</div></div></div>').join('') + (m.note ? '<div class="col-12 small text-warning-emphasis">' + m.note + '</div>' : '');
+  }
+  fetch(window.MEAS_URL).then(r => r.json()).then(d => { meas = d; drawMeas(); }).catch(() => $('measBox').innerHTML = '<div class="empty">Measurements unavailable.</div>');
+  $('mRegion').addEventListener('change', drawMeas);
+})();

@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Segmentation evaluation{% endblock %}
+{% block content %}
+{% include "_exam_nav.html" %}
+{% if not exam.has_ground_truth %}
+<div class="alert alert-secondary"><strong>Quantitative accuracy cannot be calculated for this examination</strong> because no ground-truth mask was supplied. Upload a new examination with a reference mask to enable evaluation. No accuracy values are estimated or displayed.</div>
+{% else %}
+<div class="card mb-3"><div class="card-body d-flex flex-wrap gap-3 align-items-center">
+  <form id="evalForm" data-url="{{ url_for('evaluate', exam_id=exam.id) }}" data-status="{{ url_for('status', exam_id=exam.id) }}"><button class="btn btn-primary" id="evalBtn" {{ 'disabled' if not exam.segmentation }}><i class="bi bi-rulers"></i> {{ 'Re-run evaluation' if exam.evaluation else 'Run evaluation' }}</button></form>
+  <span id="evalMsg" class="small text-muted">{{ 'Run segmentation first.' if not exam.segmentation }}</span></div></div>
+{% if exam.evaluation %}
+<div class="card mb-3"><div class="card-header">Metrics (this single examination; BraTS regions WT = {1,2,4}, TC = {1,4}, ET = {4})</div>
+<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Region</th><th>Dice</th><th>IoU</th><th>Precision</th><th>Recall</th><th>Specificity</th><th>HD95 (mm)</th><th>Pred. voxels</th><th>Ref. voxels</th><th>Notes</th></tr></thead><tbody>
+{% for e in exam.evaluation %}<tr><td>{{ e.region }}</td>{% for k in ['dice','iou','precision','recall','specificity'] %}<td>{{ '%.4f'|format(e[k]) if e[k] is not none else 'N/A' }}</td>{% endfor %}<td>{{ '%.2f'|format(e.hd95_mm) if e.hd95_mm is not none else 'N/A' }}</td><td>{{ e.pred_voxels }}</td><td>{{ e.ref_voxels }}</td><td>{{ e.notes }}</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="row"><div class="col-lg-6"><div class="card"><div class="card-body"><canvas id="evalChart" height="200"></canvas></div></div></div>
+<div class="col-lg-6"><div class="alert alert-light small"><strong>Metric policy.</strong> {{ policy }}<br>Metrics from one case say little about performance; a valid assessment needs a patient-wise independent test cohort (see experiments/ and docs/limitations.md).</div></div></div>
+{% endif %}{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if exam.evaluation %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>const ev={{ exam.evaluation|tojson }};
+new Chart(document.getElementById('evalChart'),{type:'bar',data:{labels:ev.map(e=>e.region),datasets:[{label:'Dice',data:ev.map(e=>e.dice)},{label:'IoU',data:ev.map(e=>e.iou)},{label:'Precision',data:ev.map(e=>e.precision)},{label:'Recall',data:ev.map(e=>e.recall)}]},options:{scales:{y:{min:0,max:1}}}});</script>{% endif %}
+<script src="{{ url_for('static', filename='js/evaluation.js') }}"></script>
+{% endblock %}

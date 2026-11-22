@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% block title %}Radiomics analysis{% endblock %}
+{% block content %}
+{% include "_exam_nav.html" %}
+<div class="alert alert-info small">Radiomics features are descriptive research quantities computed with PyRadiomics. They are <strong>not</strong> validated biomarkers and carry no established diagnostic or prognostic meaning here. Settings are stored with each run; no resampling or normalisation is applied unless configured in <code>radiomics_analysis/settings.yaml</code>.</div>
+<div class="card mb-3"><div class="card-header">Run extraction</div><div class="card-body">
+<form id="radForm" data-url="{{ url_for('radiomics', exam_id=exam.id) }}" data-status="{{ url_for('status', exam_id=exam.id) }}">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-3"><label class="form-label">Mask source</label><select class="form-select" name="source">
+      <option value="predicted" {{ 'selected' if source=='predicted' }} {{ 'disabled' if not exam.segmentation }}>Predicted</option>
+      <option value="ground_truth" {{ 'selected' if source=='ground_truth' }} {{ 'disabled' if not exam.has_ground_truth }}>Ground truth</option></select></div>
+    <div class="col-md-3"><label class="form-label d-block">Regions</label>{% for r in ['WT','TC','ET'] %}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="regions" value="{{ r }}" id="r{{ r }}" checked><label class="form-check-label" for="r{{ r }}">{{ r }}</label></div>{% endfor %}</div>
+    <div class="col-md-4"><label class="form-label d-block">Modalities</label>{% for m in ['t1','t1ce','t2','flair'] %}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="modalities" value="{{ m }}" id="m{{ m }}" checked><label class="form-check-label" for="m{{ m }}">{{ m|upper }}</label></div>{% endfor %}</div>
+    <div class="col-md-2"><button class="btn btn-primary w-100" id="radBtn" type="submit" {{ 'disabled' if not exam.segmentation }}>Extract</button></div>
+  </div><div id="radMsg" class="small mt-2 text-muted"></div>
+</form>{% if not exam.segmentation %}<p class="empty mt-2 mb-0">Run segmentation first.</p>{% endif %}</div></div>
+
+{% set run = (exam.radiomics_runs|selectattr('segmentation_source','equalto',source)|list|first) %}
+{% if rows %}
+<div class="row g-3 mb-3" id="catCards">
+  {% for fam, title in [('shape','Shape'),('firstorder','First-order'),('glcm','GLCM'),('glrlm','GLRLM'),('glszm','GLSZM'),('gldm','GLDM'),('ngtdm','NGTDM')] %}
+  <div class="col-6 col-md-3 col-xl"><div class="metric cat-card" role="button" data-fam="{{ fam }}"><div class="k">{{ title }}</div><div class="v">{{ rows|selectattr('feature_class','equalto',fam)|list|length }}</div><div class="u">values extracted</div></div></div>{% endfor %}
+</div>
+<div class="card mb-3"><div class="card-header">Key shape measurements by region (PyRadiomics)</div><div class="card-body"><div class="row g-3">
+  <div class="col-lg-7"><div id="shapeChart" style="height:280px"></div></div>
+  <div class="col-lg-5"><table class="table table-sm" id="shapeTable"><thead><tr><th>Region</th><th>Feature</th><th class="text-end">Value</th></tr></thead><tbody>
+  {% for r in rows if r.feature_class=='shape' and r.feature_name in ['MeshVolume','VoxelVolume','SurfaceArea','Sphericity','Maximum3DDiameter','SurfaceVolumeRatio'] %}<tr data-region="{{ r.region }}" data-name="{{ r.feature_name }}" data-value="{{ r.value }}"><td>{{ r.region }}</td><td>{{ r.feature_name }}</td><td class="text-end">{{ '%.5g'|format(r.value) }}</td></tr>{% endfor %}</tbody></table>
+  <div class="small text-muted">Units (PyRadiomics, native spacing): volumes mm³, surface area mm², diameters mm.</div></div></div></div></div>
+<div class="card mb-3"><div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center"><span>Features &ndash; {{ source|replace('_',' ') }} mask ({{ rows|length }} values)</span>
+  <span><a class="btn btn-sm btn-outline-primary" href="{{ url_for('radiomics_download', exam_id=exam.id, source=source) }}">CSV</a>
+  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('radiomics_download', exam_id=exam.id, source=source, format='xlsx') }}">Excel</a></span></div>
+<div class="card-body">
+  {% if run %}<p class="small text-muted">PyRadiomics {{ run.pyradiomics_version }} &middot; settings: <code>{{ run.settings_json[:400] }}</code>{% if run.failures_json and run.failures_json != '[]' %}<br><span class="text-danger">Failures: {{ run.failures_json[:400] }}</span>{% endif %}</p>{% endif %}
+  <div class="row g-2 mb-2">
+    <div class="col-md-3"><select id="fRegion" class="form-select form-select-sm" aria-label="Region filter"><option value="">All regions</option><option>WT</option><option>TC</option><option>ET</option></select></div>
+    <div class="col-md-3"><select id="fModality" class="form-select form-select-sm" aria-label="Modality filter"><option value="">All modalities</option><option>t1</option><option>t1ce</option><option>t2</option><option>flair</option><option>mask_only</option></select></div>
+    <div class="col-md-3"><select id="fFamily" class="form-select form-select-sm" aria-label="Family filter"><option value="">All families</option>{% for f in families %}<option>{{ f }}</option>{% endfor %}</select></div>
+    <div class="col-md-3"><input id="fText" class="form-control form-control-sm" placeholder="Search feature name" aria-label="Search"></div></div>
+  <div class="table-responsive" style="max-height:420px"><table class="table table-sm table-striped" id="featTable"><thead class="sticky-top bg-white"><tr><th>Feature</th><th>Value</th><th>Family</th><th>Region</th><th>Modality</th></tr></thead><tbody>
+  {% for r in rows %}<tr data-region="{{ r.region }}" data-modality="{{ r.modality }}" data-family="{{ r.feature_class }}"><td>{{ r.feature_name }}</td><td>{{ '%.6g'|format(r.value) if r.value is not none else 'N/A' }}</td><td>{{ r.feature_class }}</td><td>{{ r.region }}</td><td>{{ r.modality }}</td></tr>{% endfor %}</tbody></table></div>
+  <div id="visibleCount" class="small text-muted"></div>
+  <h3 class="h6 mt-3">Feature distribution (current filter)</h3><div id="distPlot" style="height:320px"></div>
+  <p class="small text-muted">Histogram of the values of the filtered features. Features have different units/scales, so interpret within a single family/feature only.</p>
+</div></div>
+{% else %}<p class="empty">No radiomics results for the "{{ source|replace('_',' ') }}" source yet.</p>{% endif %}
+
+{% if comparison %}
+<div class="card mb-3"><div class="card-header">Paired comparison: predicted vs ground-truth mask ({{ n_comparison }} features; first 500 shown)</div><div class="card-body">
+<p class="small text-muted">Same scan, same settings; differences reflect segmentation differences and do not establish clinical significance. Relative difference is blank when the reference value is 0.</p>
+<div class="table-responsive" style="max-height:360px"><table class="table table-sm"><thead class="sticky-top bg-white"><tr><th>Region</th><th>Modality</th><th>Family</th><th>Feature</th><th>Reference</th><th>Predicted</th><th>|Diff|</th><th>Rel. diff %</th></tr></thead><tbody>
+{% for c in comparison %}<tr><td>{{ c.region }}</td><td>{{ c.modality }}</td><td>{{ c.feature_class }}</td><td>{{ c.feature_name }}</td><td>{{ c.reference_value }}</td><td>{{ c.predicted_value }}</td><td>{{ c.abs_diff }}</td><td>{{ c.rel_diff_percent }}</td></tr>{% endfor %}</tbody></table></div></div></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script><script src="{{ url_for('static', filename='js/radiomics.js') }}"></script>{% endblock %}
