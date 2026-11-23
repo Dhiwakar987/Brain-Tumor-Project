@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const $ = id => document.getElementById(id);
   // ---------- segmentation job control ----------
   const segBtn = $('segmentBtn');
@@ -95,7 +95,6 @@
     });
   }
 
-  if (!window.HAS_SEG) return;
 
   const CS_ALL = [[0, '#e53935'], [0.3333, '#e53935'], [0.3334, '#fdd835'], [0.6666, '#fdd835'], [0.6667, '#1e88e5'], [1, '#1e88e5']], CS_ONE = [[0, '#00e676'], [1, '#00e676']];
   const cfg = { responsive: true, displaylogo: false, scrollZoom: false, modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'] };
@@ -116,7 +115,7 @@
   }
   function draw(relayout) {
     if (!cache) return; $('sliceLabel').textContent = cache.index + ' / ' + (cache.n_slices - 1); $('opLabel').textContent = $('vOpacity').value;
-    $('orientInfo').textContent = 'Image orientation (array axes): ' + cache.orientation + ' · ' + cache.xlabel + ' (horizontal), ' + cache.ylabel + ' (vertical)';
+    $('orientInfo').textContent = 'Image orientation (array axes): ' + cache.orientation + ' Â· ' + cache.xlabel + ' (horizontal), ' + cache.ylabel + ' (vertical)';
     const mode = $('vMode').value, region = $('vRegion').value, tr = [];
     if (mode !== 'mask') tr.push(gray(cache.image));
     if (mode !== 'mri' && cache.mask) tr.push(heat(cache.mask, region, mode === 'mask' ? 1 : parseFloat($('vOpacity').value)));
@@ -132,6 +131,71 @@
   $('vSlice').addEventListener('input', () => { $('sliceLabel').textContent = $('vSlice').value; lazyLoad(); });
   el.addEventListener('wheel', e => { e.preventDefault(); const s = $('vSlice'); s.value = Math.max(0, Math.min(+s.max, +s.value + (e.deltaY > 0 ? 1 : -1))); lazyLoad(); }, { passive: false });
   load();
+
+
+  if (!window.HAS_SEG) {
+    const p3 = $('mri3d');
+    async function loadMri3d() {
+      p3.innerHTML = '<div class="p-3 text-muted">Loading MRI planes…</div>';
+      try {
+        const modality = $('vModality').value;
+        const views = ['axial', 'coronal', 'sagittal'];
+        const planes = await Promise.all(views.map(async view => {
+          const q = new URLSearchParams({modality, view, region: 'ALL', source: 'predicted'});
+          const r = await fetch(el.dataset.url + '?' + q);
+          if (!r.ok) throw new Error('Could not load ' + view + ' MRI plane.');
+          return {view, d: await r.json()};
+        }));
+
+        const grid = (rows, cols, fn) =>
+          Array.from({length: rows}, (_, r) =>
+            Array.from({length: cols}, (_, c) => fn(r, c)));
+        const traces = planes.map(({view, d}) => {
+          const rows = d.image.length, cols = d.image[0].length;
+          const x = grid(rows, cols, (r, c) =>
+            view === 'sagittal' ? d.index : c);
+          const y = grid(rows, cols, (r, c) =>
+            view === 'axial' ? r : view === 'coronal' ? d.index : c);
+          const z = grid(rows, cols, (r, c) =>
+            view === 'axial' ? d.index : r);
+
+          return {
+            type: 'surface', x, y, z, surfacecolor: d.image,
+            colorscale: 'Greys', cmin: 0, cmax: 255,
+            showscale: false, opacity: 0.94, name: view,
+            hoverinfo: 'skip',
+            lighting: {ambient: 1, diffuse: 0, specular: 0, roughness: 1}
+          };
+        });
+
+        Plotly.react(p3, traces, {
+          margin: {l: 0, r: 0, t: 8, b: 0},
+          paper_bgcolor: '#0b1220', plot_bgcolor: '#0b1220',
+          showlegend: false,
+          scene: {
+            bgcolor: '#0b1220', aspectmode: 'data',
+            xaxis: {title: 'Volume axis 0', color: '#9fb0c9'},
+            yaxis: {title: 'Volume axis 1', color: '#9fb0c9'},
+            zaxis: {title: 'Volume axis 2', color: '#9fb0c9'}
+          }
+        }, cfg);
+      } catch (err) {
+        p3.innerHTML = '<div class="p-3 text-danger"></div>';
+        p3.firstElementChild.textContent = err.message || 'Could not load 3D MRI view.';
+      }
+    }
+    $('vModality').addEventListener('change', loadMri3d);
+    loadMri3d();
+
+    // Navigate to the pre-segmentation 3D MRI planes panel.
+    if (window.AUTO_OPEN_3D) {
+      requestAnimationFrame(() => {
+        p3.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+    return;
+  }
+
 
   // ---------- three-panel comparison ----------
   const cd = $('cmpData'); let cview = 'axial', cc = null, cReset = true, cLoaded = false;
@@ -153,7 +217,7 @@
   const p3 = $('plot3d'); let mesh = null, loaded3 = false;
   const COL = { 'NCR/NET (label 1)': '#e53935', 'Edema (label 2)': '#fdd835', 'Enhancing (label 4)': '#1e88e5' };
   async function load3d() {
-    p3.innerHTML = '<div class="p-4 text-light">Building 3-D surfaces from the MRI and segmentation…</div>';
+    p3.innerHTML = '<div class="p-4 text-light">Building 3-D surfaces from the MRI and segmentationâ€¦</div>';
     const r = await fetch(p3.dataset.url + '?modality=' + $('m3Modality').value); const d = await r.json();
     if (!r.ok) { p3.innerHTML = '<div class="p-4 text-warning">' + (d.error || 'Unavailable') + '</div>'; return; }
     mesh = d; $('m3Note').textContent = (d.notes || []).join('; '); draw3d();
@@ -173,12 +237,12 @@
 
   // ---------- measurements panel ----------
   let meas = null;
-  const f = (v, d = 1) => v === null || v === undefined ? '–' : Number(v).toFixed(d);
+  const f = (v, d = 1) => v === null || v === undefined ? 'â€“' : Number(v).toFixed(d);
   function drawMeas() {
     if (!meas) return; const m = meas.predicted[$('mRegion').value]; const ext = m.bbox_extent_mm;
-    const cards = [['Volume', f(m.volume_mm3, 0), 'mm³'], ['Volume', f(m.volume_ml, 2), 'mL'], ['Voxel count', m.voxel_count, 'voxels'], ['Voxel size', f(m.voxel_volume_mm3, 2), 'mm³ / voxel'],
-      ['Surface area', f(m.surface_area_mm2, 0), 'mm²'], ['Sphericity', f(m.sphericity, 3), ''], ['Max 3-D diameter', f(m.max_3d_diameter_mm, 1), 'mm'], ['Surface / volume', f(m.surface_to_volume_ratio_per_mm, 3), '1/mm'],
-      ['Extent (axes 0·1·2)', ext ? ext.map(v => v.toFixed(0)).join(' × ') : '–', 'mm']];
+    const cards = [['Volume', f(m.volume_mm3, 0), 'mmÂ³'], ['Volume', f(m.volume_ml, 2), 'mL'], ['Voxel count', m.voxel_count, 'voxels'], ['Voxel size', f(m.voxel_volume_mm3, 2), 'mmÂ³ / voxel'],
+      ['Surface area', f(m.surface_area_mm2, 0), 'mmÂ²'], ['Sphericity', f(m.sphericity, 3), ''], ['Max 3-D diameter', f(m.max_3d_diameter_mm, 1), 'mm'], ['Surface / volume', f(m.surface_to_volume_ratio_per_mm, 3), '1/mm'],
+      ['Extent (axes 0Â·1Â·2)', ext ? ext.map(v => v.toFixed(0)).join(' Ã— ') : 'â€“', 'mm']];
     $('measBox').innerHTML = cards.map(c => '<div class="col-6"><div class="metric"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div><div class="u">' + c[2] + '</div></div></div>').join('') + (m.note ? '<div class="col-12 small text-warning-emphasis">' + m.note + '</div>' : '');
   }
   fetch(window.MEAS_URL).then(r => r.json()).then(d => { meas = d; drawMeas(); }).catch(() => $('measBox').innerHTML = '<div class="empty">Measurements unavailable.</div>');
@@ -191,3 +255,4 @@
     }
   }
 })();
+

@@ -22,3 +22,5 @@ results/*/
 *.npy
 data/*
 !data/README.md
+*.npz
+prepared_3d_patches/git rm -r --cached prepared_3d_patches/

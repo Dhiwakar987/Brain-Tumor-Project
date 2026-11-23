@@ -1,0 +1,18 @@
+﻿{% extends "base.html" %}
+{% block title %}Examination Explainability{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <h2>Explainability</h2>
+        <p>Examination #{{ exam.id }}</p>
+        <p>
+            This page will show model-attribution information for a
+            selected MRI slice and segmentation region.
+        </p>
+        <div class="alert alert-secondary mb-0">
+            Explanation generation is not connected yet.
+        </div>
+    </div>
+</div>
+{% endblock %}

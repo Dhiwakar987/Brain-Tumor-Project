@@ -50,15 +50,19 @@ def create_app(config_class=Config):
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     log = logging.getLogger("app")
+
     if getattr(config_class, "SECRET_KEY_WAS_GENERATED", False):
         log.warning(
             "SECRET_KEY not set: using a random per-process key. Set SECRET_KEY in .env."
         )
+
     csrf.init_app(app)
     db.initialize_database(config_class.DATABASE_PATH)
+
     n_int = db.mark_interrupted_jobs()
     if n_int:
         log.warning("%d job(s) were interrupted by a restart", n_int)
+
     fs.cleanup_partial_outputs(config_class.OUTPUT_DIR)
     svc = AnalysisService(config_class)
     app.extensions["analysis_service"] = svc
@@ -71,7 +75,10 @@ def create_app(config_class=Config):
 
     @app.context_processor
     def inject():
-        return {"app_version": APP_VERSION, "max_upload_mb": config_class.MAX_UPLOAD_MB}
+        return {
+            "app_version": APP_VERSION,
+            "max_upload_mb": config_class.MAX_UPLOAD_MB,
+        }
 
     # ---------------- pages ----------------
 
@@ -81,7 +88,6 @@ def create_app(config_class=Config):
 
     @app.get("/dashboard")
     def dashboard():
-        
         stats = db.dashboard_stats()
         recent = db.get_all_examinations()[:8]
 
@@ -104,27 +110,44 @@ def create_app(config_class=Config):
     @app.get("/analysis/new")
     def new_analysis():
         return render_template(
-            
-            "upload.html", extensions=config_class.ALLOWED_EXTENSIONS
+            "upload.html",
+            extensions=config_class.ALLOWED_EXTENSIONS,
         )
 
     @app.post("/analysis/upload")
     def upload():
         files = {r: request.files.get(r) for r in fs.ROLES}
-        res = svc.create_examination(files, request.form.get("patient_label"))
+        res = svc.create_examination(
+            files,
+            request.form.get("patient_label"),
+        )
+
         if request.headers.get("X-Requested-With") == "fetch":
             if res["ok"]:
                 return jsonify(
                     ok=True,
-                    redirect=url_for("results", exam_id=res["id"], autostart=1),
+                    redirect=url_for(
+                        "results",
+                        exam_id=res["id"],
+                        autostart=1,
+                    ),
                     warnings=res.get("warnings", []),
                 )
             return jsonify(ok=False, errors=res["errors"]), 400
+
         if res["ok"]:
             flash("Upload validated.", "success")
-            return redirect(url_for("results", exam_id=res["id"], autostart=1))
+            return redirect(
+                url_for(
+                    "results",
+                    exam_id=res["id"],
+                    autostart=1,
+                )
+            )
+
         for e in res["errors"]:
             flash(e, "danger")
+
         return redirect(url_for("new_analysis"))
 
     @app.post("/analysis/<int:exam_id>/segment")
@@ -137,6 +160,7 @@ def create_app(config_class=Config):
     def status(exam_id):
         exam = get_exam_or_404(exam_id)
         job = db.get_latest_job(exam_id)
+
         return jsonify(
             exam_status=exam["status"],
             error=exam["error_message"],
@@ -156,6 +180,7 @@ def create_app(config_class=Config):
     def results(exam_id):
         exam = get_exam_or_404(exam_id)
         rad = {}
+
         for r in db.get_radiomics_rows(exam_id, "predicted"):
             if (
                 r["feature_class"] == "shape"
@@ -171,13 +196,51 @@ def create_app(config_class=Config):
                 )
             ):
                 rad[r["feature_name"]] = r["value"]
+
         return render_template(
-            "results.html", exam=exam, regions=fs.MODALITIES, rad_summary=rad, auto_start=(request.args.get("autostart") == "1"), auto_open_3d=(request.args.get("view3d") == "1")
+            "results.html",
+            exam=exam,
+            regions=fs.MODALITIES,
+            rad_summary=rad,
+            auto_start=(request.args.get("autostart") == "1"),
+            auto_open_3d=(request.args.get("view3d") == "1"),
         )
+
+    @app.get("/viewer/2d")
+    @app.get("/viewer/2d/<int:exam_id>")
+    def viewer_2d(exam_id=None):
+        if exam_id is None:
+            exams = db.get_all_examinations()
+            exam = max(exams, key=lambda e: e["id"], default=None)
+            if exam is None:
+                flash("Upload an MRI analysis first to open the 2D viewer.", "warning")
+                return redirect(url_for("history"))
+            exam_id = exam["id"]
+        else:
+            get_exam_or_404(exam_id)
+
+        return redirect(url_for("results", exam_id=exam_id))
+
+
+    @app.get("/viewer/3d")
+    @app.get("/viewer/3d/<int:exam_id>")
+    def viewer_3d(exam_id=None):
+        if exam_id is None:
+            exams = db.get_all_examinations()
+            exam = max(exams, key=lambda e: e["id"], default=None)
+            if exam is None:
+                flash("Upload an MRI analysis first to open the 3D viewer.", "warning")
+                return redirect(url_for("history"))
+            exam_id = exam["id"]
+        else:
+            get_exam_or_404(exam_id)
+
+        return redirect(url_for("results", exam_id=exam_id, view3d=1))
 
     @app.get("/analysis/<int:exam_id>/slice")
     def slice_data(exam_id):
         exam = get_exam_or_404(exam_id)
+
         try:
             idx = request.args.get("index", type=int)
             payload = svc.slice_payload(
@@ -190,11 +253,13 @@ def create_app(config_class=Config):
             )
         except (ValueError, KeyError) as exc:
             return jsonify(error=str(exc)), 400
+
         return jsonify(payload)
 
     @app.get("/analysis/<int:exam_id>/compare-slice")
     def compare_slice(exam_id):
         exam = get_exam_or_404(exam_id)
+
         try:
             return jsonify(
                 svc.compare_payload(
@@ -211,16 +276,22 @@ def create_app(config_class=Config):
     @app.get("/analysis/<int:exam_id>/mesh3d")
     def mesh3d(exam_id):
         exam = get_exam_or_404(exam_id)
+
         try:
             return jsonify(
-                svc.mesh_payload(exam, request.args.get("modality", "flair"))
+                svc.mesh_payload(
+                    exam,
+                    request.args.get("modality", "flair"),
+                )
             )
         except ValueError as exc:
             return jsonify(error=str(exc)), 400
         except Exception as exc:
             log.exception("3D mesh failed")
             return (
-                jsonify(error=f"3D mesh could not be built: {type(exc).__name__}"),
+                jsonify(
+                    error=f"3D mesh could not be built: {type(exc).__name__}"
+                ),
                 500,
             )
 
@@ -228,25 +299,34 @@ def create_app(config_class=Config):
     def measurements(exam_id):
         exam = get_exam_or_404(exam_id)
         m = svc.measurements(exam)
+
         if m is None:
             return jsonify(error="No segmentation yet"), 404
+
         return jsonify(m)
 
     @app.get("/analysis/<int:exam_id>/export")
     def export(exam_id):
         get_exam_or_404(exam_id)
         fmt = request.args.get("format", "json")
+
         if fmt == "json":
             resp = app.response_class(
-                json.dumps(svc.export_json(exam_id), indent=2, default=str),
+                json.dumps(
+                    svc.export_json(exam_id),
+                    indent=2,
+                    default=str,
+                ),
                 mimetype="application/json",
             )
             resp.headers["Content-Disposition"] = (
                 f"attachment; filename=exam{exam_id}_analysis.json"
             )
             return resp
+
         if fmt not in ("csv", "xlsx"):
             abort(400)
+
         return send_file(
             svc.export_file(exam_id, fmt),
             as_attachment=True,
@@ -257,23 +337,34 @@ def create_app(config_class=Config):
     def review(exam_id):
         get_exam_or_404(exam_id)
         st = request.form.get("review_status")
-        if st not in ("not_reviewed", "reviewed", "requires_attention"):
+
+        if st not in (
+            "not_reviewed",
+            "reviewed",
+            "requires_attention",
+        ):
             abort(400)
+
         db.update_examination_status(
             exam_id,
             review_status=st,
             review_note=(request.form.get("review_note") or "")[:500],
         )
         db.log_audit(exam_id, f"review_{st}")
+
         flash(
             "Review status saved (this is a research-workflow flag, not clinical approval).",
             "success",
         )
         return redirect(url_for("results", exam_id=exam_id))
 
-    @app.route("/analysis/<int:exam_id>/radiomics", methods=["GET", "POST"])
+    @app.route(
+        "/analysis/<int:exam_id>/radiomics",
+        methods=["GET", "POST"],
+    )
     def radiomics(exam_id):
         exam = get_exam_or_404(exam_id)
+
         if request.method == "POST":
             res = svc.start_radiomics(
                 exam_id,
@@ -281,22 +372,34 @@ def create_app(config_class=Config):
                 request.form.getlist("regions"),
                 request.form.getlist("modalities"),
             )
+
             if request.headers.get("X-Requested-With") == "fetch":
                 return jsonify(res), (202 if res["ok"] else 409)
+
             flash(
                 "Radiomics started." if res["ok"] else res["error"],
                 "info" if res["ok"] else "danger",
             )
             return redirect(url_for("radiomics", exam_id=exam_id))
+
         source = request.args.get("source", "predicted")
         rows = db.get_radiomics_rows(exam_id, source)
         comparison = svc.radiomics_comparison(exam_id)
+
         return render_template(
             "radiomics.html",
             exam=exam,
             rows=rows,
             source=source,
-            families=["shape", "firstorder", "glcm", "glrlm", "glszm", "gldm", "ngtdm"],
+            families=[
+                "shape",
+                "firstorder",
+                "glcm",
+                "glrlm",
+                "glszm",
+                "gldm",
+                "ngtdm",
+            ],
             comparison=(
                 None
                 if comparison is None
@@ -309,40 +412,61 @@ def create_app(config_class=Config):
     def radiomics_download(exam_id):
         exam = get_exam_or_404(exam_id)
         source = request.args.get("source", "predicted")
+
         if source not in ("predicted", "ground_truth"):
             abort(400)
+
         if not db.get_radiomics_rows(exam_id, source):
             flash("No radiomics results to export.", "warning")
             return redirect(url_for("radiomics", exam_id=exam_id))
+
         excel = request.args.get("format") == "xlsx"
+
         return send_file(
             svc.radiomics_csv(exam_id, source, excel),
             as_attachment=True,
-            download_name=f"radiomics_exam{exam_id}_{source}.{'xlsx' if excel else 'csv'}",
+            download_name=(
+                f"radiomics_exam{exam_id}_{source}."
+                f"{'xlsx' if excel else 'csv'}"
+            ),
         )
 
     @app.get("/analysis/<int:exam_id>/radiomics/data")
     def radiomics_data(exam_id):
         get_exam_or_404(exam_id)
         return jsonify(
-            db.get_radiomics_rows(exam_id, request.args.get("source", "predicted"))
+            db.get_radiomics_rows(
+                exam_id,
+                request.args.get("source", "predicted"),
+            )
         )
 
-    @app.route("/analysis/<int:exam_id>/evaluate", methods=["GET", "POST"])
+    @app.route(
+        "/analysis/<int:exam_id>/evaluate",
+        methods=["GET", "POST"],
+    )
     def evaluate(exam_id):
         exam = get_exam_or_404(exam_id)
+
         if request.method == "POST":
             res = svc.start_evaluation(exam_id)
+
             if request.headers.get("X-Requested-With") == "fetch":
                 return jsonify(res), (202 if res["ok"] else 409)
+
             flash(
                 "Evaluation started." if res["ok"] else res["error"],
                 "info" if res["ok"] else "danger",
             )
             return redirect(url_for("evaluate", exam_id=exam_id))
+
         from segmentation.metrics import EMPTY_MASK_POLICY
 
-        return render_template("evaluation.html", exam=exam, policy=EMPTY_MASK_POLICY)
+        return render_template(
+            "evaluation.html",
+            exam=exam,
+            policy=EMPTY_MASK_POLICY,
+        )
 
     @app.get("/analysis/<int:exam_id>/report")
     def report(exam_id):
@@ -352,27 +476,36 @@ def create_app(config_class=Config):
     @app.post("/analysis/<int:exam_id>/report/generate")
     def report_generate(exam_id):
         get_exam_or_404(exam_id)
+
         try:
             svc.generate_report(exam_id)
             flash("Report generated.", "success")
         except Exception as exc:
             log.exception("Report failed")
-            flash(f"Report generation failed: {type(exc).__name__}", "danger")
+            flash(
+                f"Report generation failed: {type(exc).__name__}",
+                "danger",
+            )
+
         return redirect(url_for("report", exam_id=exam_id))
 
     @app.get("/analysis/<int:exam_id>/download-report")
     def download_report(exam_id):
         exam = get_exam_or_404(exam_id)
+
         if not exam["reports"]:
             flash("Generate a report first.", "warning")
             return redirect(url_for("report", exam_id=exam_id))
+
         name = exam["reports"][0]["file_name"]
         path = (svc.output_dir(exam["exam_uid"]) / name).resolve()
+
         if (
             svc.output_dir(exam["exam_uid"]).resolve() not in path.parents
             or not path.is_file()
         ):
             abort(404)
+
         return send_file(
             path,
             as_attachment=True,
@@ -383,8 +516,10 @@ def create_app(config_class=Config):
     @app.get("/analysis/<int:exam_id>/download/prediction")
     def download_prediction(exam_id):
         exam = get_exam_or_404(exam_id)
+
         if not exam["segmentation"]:
             abort(404)
+
         return send_file(
             svc.prediction_path(exam),
             as_attachment=True,
@@ -394,8 +529,13 @@ def create_app(config_class=Config):
     @app.get("/analysis/<int:exam_id>/download/metadata")
     def download_metadata(exam_id):
         get_exam_or_404(exam_id)
+
         resp = app.response_class(
-            json.dumps(svc.metadata_package(exam_id), indent=2, default=str),
+            json.dumps(
+                svc.metadata_package(exam_id),
+                indent=2,
+                default=str,
+            ),
             mimetype="application/json",
         )
         resp.headers["Content-Disposition"] = (
@@ -405,7 +545,10 @@ def create_app(config_class=Config):
 
     @app.get("/history")
     def history():
-        return render_template("history.html", exams=db.get_all_examinations())
+        return render_template(
+            "history.html",
+            exams=db.get_all_examinations(),
+        )
 
     @app.get("/history/<int:exam_id>")
     def history_detail(exam_id):
@@ -416,10 +559,17 @@ def create_app(config_class=Config):
     def history_delete(exam_id):
         get_exam_or_404(exam_id)
         res = svc.delete_examination(exam_id)
+
         flash(
             res.get("warning")
-            or ("Examination deleted." if res["ok"] else res["error"]),
-            "warning" if res.get("warning") else ("success" if res["ok"] else "danger"),
+            or (
+                "Examination deleted."
+                if res["ok"]
+                else res["error"]
+            ),
+            "warning"
+            if res.get("warning")
+            else ("success" if res["ok"] else "danger"),
         )
         return redirect(url_for("history"))
 
@@ -435,6 +585,14 @@ def create_app(config_class=Config):
     def classification():
         return render_template("classification.html")
 
+    @app.get("/analysis/<int:exam_id>/explainability")
+    def exam_explainability(exam_id):
+        exam = get_exam_or_404(exam_id)
+        return render_template(
+            "exam_explainability.html",
+            exam=exam,
+        )
+
     @app.get("/explainability")
     def explainability():
         return render_template("explainability.html")
@@ -442,7 +600,12 @@ def create_app(config_class=Config):
     @app.get("/performance")
     def performance():
         vf = config_class.VERIFICATION_DIR / "checkpoint_inspection.json"
-        ver = json.loads(vf.read_text(encoding="utf-8")) if vf.is_file() else None
+        ver = (
+            json.loads(vf.read_text(encoding="utf-8"))
+            if vf.is_file()
+            else None
+        )
+
         return render_template(
             "performance.html",
             perf=db.performance_summary(),
@@ -453,7 +616,6 @@ def create_app(config_class=Config):
     @app.get("/about")
     def about():
         return render_template("about.html")
-
 
     # ---------------- Patient 055 3D Stack Demo ----------------
 
@@ -466,7 +628,9 @@ def create_app(config_class=Config):
         source = Path.home() / "Downloads" / "patient_055_3d_demo.npz"
 
         if not source.is_file():
-            return jsonify(error="Patient 055 demo stack was not found in Downloads."), 404
+            return jsonify(
+                error="Patient 055 demo stack was not found in Downloads."
+            ), 404
 
         try:
             from scipy import ndimage
@@ -478,13 +642,19 @@ def create_app(config_class=Config):
                 indices = data["slice_indices"]
 
             if images.shape != (149, 4, 240, 240):
-                return jsonify(error="Unexpected image stack dimensions."), 400
+                return jsonify(
+                    error="Unexpected image stack dimensions."
+                ), 400
 
             if masks.shape != (149, 240, 240):
-                return jsonify(error="Unexpected mask stack dimensions."), 400
+                return jsonify(
+                    error="Unexpected mask stack dimensions."
+                ), 400
 
             if len(indices) != 149 or not np.all(np.diff(indices) == 1):
-                return jsonify(error="Slice indices are not consecutive."), 400
+                return jsonify(
+                    error="Slice indices are not consecutive."
+                ), 400
 
             surfaces = []
 
@@ -500,31 +670,34 @@ def create_app(config_class=Config):
                     smooth,
                     level=0.5,
                     spacing=(1, 1, 1),
-                    step_size=2
+                    step_size=2,
                 )
 
-                surfaces.append({
-                    "label": label_id,
-                    "voxels": int(volume.sum()),
-                    "x": vertices[:, 2].round(2).tolist(),
-                    "y": vertices[:, 1].round(2).tolist(),
-                    "z": vertices[:, 0].round(2).tolist(),
-                    "i": faces[:, 0].tolist(),
-                    "j": faces[:, 1].tolist(),
-                    "k": faces[:, 2].tolist()
-                })
+                surfaces.append(
+                    {
+                        "label": label_id,
+                        "voxels": int(volume.sum()),
+                        "x": vertices[:, 2].round(2).tolist(),
+                        "y": vertices[:, 1].round(2).tolist(),
+                        "z": vertices[:, 0].round(2).tolist(),
+                        "i": faces[:, 0].tolist(),
+                        "j": faces[:, 1].tolist(),
+                        "k": faces[:, 2].tolist(),
+                    }
+                )
 
             return jsonify(
                 patient="055",
                 dimensions=list(masks.shape),
                 coordinate_units="voxel units; physical spacing not verified",
-                surfaces=surfaces
+                surfaces=surfaces,
             )
 
         except Exception:
             log.exception("Patient 055 3D demo generation failed")
-            return jsonify(error="Could not generate the 3D demonstration surfaces."), 500
-
+            return jsonify(
+                error="Could not generate the 3D demonstration surfaces."
+            ), 500
 
     # ---------------- Patient FLAIR 3D Viewer ----------------
 
@@ -537,7 +710,9 @@ def create_app(config_class=Config):
         source = Path.home() / "Downloads" / "patient_003_flair.nii.gz"
 
         if not source.is_file():
-            return jsonify(error="Patient 003 FLAIR file not found."), 404
+            return jsonify(
+                error="Patient 003 FLAIR file not found."
+            ), 404
 
         try:
             import nibabel as nib
@@ -547,24 +722,30 @@ def create_app(config_class=Config):
             volume = np.asarray(image.dataobj, dtype=np.float32)
 
             if volume.ndim != 3:
-                return jsonify(error="Expected a 3D MRI volume."), 400
+                return jsonify(
+                    error="Expected a 3D MRI volume."
+                ), 400
 
             # Downsample for a faster browser demonstration.
             small = volume[::3, ::3, ::3]
             nonzero = small[small > 0]
 
             if nonzero.size == 0:
-                return jsonify(error="The MRI volume contains no nonzero voxels."), 400
+                return jsonify(
+                    error="The MRI volume contains no nonzero voxels."
+                ), 400
 
             threshold = float(np.percentile(nonzero, 85))
 
             if not (small.min() < threshold < small.max()):
-                return jsonify(error="Could not create an intensity surface."), 400
+                return jsonify(
+                    error="Could not create an intensity surface."
+                ), 400
 
             vertices, faces, _, _ = marching_cubes(
                 small,
                 level=threshold,
-                step_size=2
+                step_size=2,
             )
 
             return jsonify(
@@ -578,43 +759,49 @@ def create_app(config_class=Config):
                 z=vertices[:, 2].round(2).tolist(),
                 i=faces[:, 0].tolist(),
                 j=faces[:, 1].tolist(),
-                k=faces[:, 2].tolist()
+                k=faces[:, 2].tolist(),
             )
 
         except Exception:
             log.exception("Patient FLAIR 3D viewer failed")
-            return jsonify(error="Could not generate the FLAIR 3D surface. Check the server terminal."), 500
+            return jsonify(
+                error="Could not generate the FLAIR 3D surface. Check the server terminal."
+            ), 500
 
     # ---------------- 2D MRI Demo ----------------
 
-    
     @app.get("/demo/2d")
     def demo_2d():
-        dataset_dir = Path.home() / "Downloads" / "_output_" / "brats2d" / "images"
-        patient_ids = sorted({
-            p.stem.rsplit("_slice", 1)[0]
-            for p in dataset_dir.glob("*.npy")
-            if "_slice" in p.stem
-        }) if dataset_dir.is_dir() else []
+        dataset_dir = (
+            Path.home()
+            / "Downloads"
+            / "_output_"
+            / "brats2d"
+            / "images"
+        )
+
+        patient_ids = sorted(
+            {
+                p.stem.rsplit("_slice", 1)[0]
+                for p in dataset_dir.glob("*.npy")
+                if "_slice" in p.stem
+            }
+        ) if dataset_dir.is_dir() else []
 
         return render_template(
             "2d_demo.html",
             patient_ids=patient_ids,
         )
 
-
-
-   
     @app.get("/demo/2d/image/<kind>")
     def demo_2d_image(kind):
-
         image_files = {
             "t1": "t1_demo.png",
             "t1ce": "t1ce_demo.png",
             "t2": "t2_demo.png",
             "flair": "flair_demo.png",
             "comparison": "2d_inference_demo.png",
-            "overlay": "2d_prediction_overlay.png"
+            "overlay": "2d_prediction_overlay.png",
         }
 
         if kind not in image_files:
@@ -622,7 +809,7 @@ def create_app(config_class=Config):
 
         image_path = os.path.join(
             config_class.VERIFICATION_DIR,
-            image_files[kind]
+            image_files[kind],
         )
 
         if not os.path.isfile(image_path):
@@ -630,26 +817,33 @@ def create_app(config_class=Config):
 
         return send_file(image_path, mimetype="image/png")
 
-
-
     @app.post("/demo/2d/run")
     def demo_2d_run():
-        dataset_root = Path.home() / "Downloads" / "_output_" / "brats2d"
+        dataset_root = (
+            Path.home()
+            / "Downloads"
+            / "_output_"
+            / "brats2d"
+        )
         images_dir = dataset_root / "images"
         masks_dir = dataset_root / "masks"
 
-        patient_ids = sorted({
-            p.stem.rsplit("_slice", 1)[0]
-            for p in images_dir.glob("*.npy")
-            if "_slice" in p.stem
-        }) if images_dir.is_dir() else []
+        patient_ids = sorted(
+            {
+                p.stem.rsplit("_slice", 1)[0]
+                for p in images_dir.glob("*.npy")
+                if "_slice" in p.stem
+            }
+        ) if images_dir.is_dir() else []
 
         try:
             patient_id = request.form.get("patient_id", "")
             slice_index = int(request.form.get("slice_index", ""))
 
             if patient_id not in patient_ids or slice_index < 0:
-                raise ValueError("Select a valid patient and slice number.")
+                raise ValueError(
+                    "Select a valid patient and slice number."
+                )
 
             sample_name = f"{patient_id}_slice{slice_index}.npy"
             image_path = images_dir / sample_name
@@ -677,25 +871,39 @@ def create_app(config_class=Config):
             if not np.issubdtype(image.dtype, np.number) or not np.issubdtype(
                 mask.dtype, np.number
             ):
-                raise ValueError("MRI and mask must contain numeric values.")
+                raise ValueError(
+                    "MRI and mask must contain numeric values."
+                )
 
             if not np.isfinite(image).all() or not np.isfinite(mask).all():
-                raise ValueError("MRI or mask contains invalid values.")
+                raise ValueError(
+                    "MRI or mask contains invalid values."
+                )
 
             if not np.isin(np.unique(mask), [0, 1, 2, 3]).all():
-                raise ValueError("Mask labels must be 0, 1, 2, or 3.")
+                raise ValueError(
+                    "Mask labels must be 0, 1, 2, or 3."
+                )
 
             if image.min() < 0 or image.max() > 255:
-                raise ValueError("Expected MRI channel values between 0 and 255.")
+                raise ValueError(
+                    "Expected MRI channel values between 0 and 255."
+                )
 
             if mask.min() < 0:
-                raise ValueError("Mask labels cannot be negative.")
+                raise ValueError(
+                    "Mask labels cannot be negative."
+                )
 
             # Scale uint8 MRI channels to [0,1]; supported by the 2D preprocessing probe, but original training preprocessing remains unverified.
             image = image.astype(np.float32) / 255.0
             mask = mask.astype(np.uint8)
 
-            padded = np.pad(image, ((0, 0), (8, 8), (8, 8)), mode="constant")
+            padded = np.pad(
+                image,
+                ((0, 0), (8, 8), (8, 8)),
+                mode="constant",
+            )
 
             model, device = load_model(
                 config_class.CHECKPOINT_PATH,
@@ -705,39 +913,56 @@ def create_app(config_class=Config):
 
             prediction = predict_slice(model, padded, device)
             prediction = prediction[8:248, 8:248]
-                        # Calculate 2D tumour measurements
+
+            # Calculate 2D tumour measurements.
             tumour_mask = prediction > 0
             labelled_mask = label(tumour_mask)
             regions = regionprops(labelled_mask)
 
             tumour_area = int(tumour_mask.sum())
-            tumour_area_percentage = round((tumour_area / tumour_mask.size) * 100, 2)
+            tumour_area_percentage = round(
+                (tumour_area / tumour_mask.size) * 100,
+                2,
+            )
             region_count = len(regions)
 
             largest_region_area = (
                 int(max(regions, key=lambda r: r.area).area)
-                if regions else 0
+                if regions
+                else 0
             )
 
             total_perimeter = round(
-                float(sum(r.perimeter for r in regions)), 2
+                float(sum(r.perimeter for r in regions)),
+                2,
             )
 
-            largest_eccentricity = round(
-                float(max(regions, key=lambda r: r.area).eccentricity),
-                4
-            ) if regions else 0.0
-            
-            # Calculate binary tumour segmentation metrics
+            largest_eccentricity = (
+                round(
+                    float(max(regions, key=lambda r: r.area).eccentricity),
+                    4,
+                )
+                if regions
+                else 0.0
+            )
+
+            # Calculate binary tumour segmentation metrics.
             gt_region = mask > 0
             pred_region = prediction > 0
 
-            intersection = np.logical_and(gt_region, pred_region).sum()
-            union = np.logical_or(gt_region, pred_region).sum()
+            intersection = np.logical_and(
+                gt_region,
+                pred_region,
+            ).sum()
+
+            union = np.logical_or(
+                gt_region,
+                pred_region,
+            ).sum()
 
             dice_score = (
-                (2.0 * intersection) /
-                (gt_region.sum() + pred_region.sum())
+                (2.0 * intersection)
+                / (gt_region.sum() + pred_region.sum())
                 if (gt_region.sum() + pred_region.sum()) > 0
                 else None
             )
@@ -748,9 +973,16 @@ def create_app(config_class=Config):
                 else None
             )
 
-            dice_score = round(float(dice_score), 4) if dice_score is not None else None
-            iou_score = round(float(iou_score), 4) if iou_score is not None else None
-            
+            dice_score = (
+                round(float(dice_score), 4)
+                if dice_score is not None
+                else None
+            )
+            iou_score = (
+                round(float(iou_score), 4)
+                if iou_score is not None
+                else None
+            )
 
             # Professional comparison: MRI with transparent tumour overlays.
             gt_region = mask > 0
@@ -758,7 +990,7 @@ def create_app(config_class=Config):
 
             fig, axes = plt.subplots(1, 3, figsize=(18, 7))
 
-            # Original MRI
+            # Original MRI.
             axes[0].imshow(image[0], cmap="gray")
             axes[0].set_title(
                 "Original MRI",
@@ -766,8 +998,7 @@ def create_app(config_class=Config):
                 fontweight="bold",
             )
 
-            # Ground truth overlay
-            
+            # Ground truth overlay.
             axes[1].imshow(image[0], cmap="gray")
             axes[1].contourf(
                 gt_region.astype(float),
@@ -787,7 +1018,7 @@ def create_app(config_class=Config):
                 fontweight="bold",
             )
 
-            # AI Prediction overlay
+            # AI prediction overlay.
             axes[2].imshow(image[0], cmap="gray")
             axes[2].contourf(
                 pred_region.astype(float),
@@ -827,12 +1058,10 @@ def create_app(config_class=Config):
                 buffer.getvalue()
             ).decode("utf-8")
 
-            # Overlay: ground truth and prediction on MRI.
-
             # Professional MRI overlay visualization.
             fig, axes = plt.subplots(1, 2, figsize=(14, 7))
 
-            # Ground-truth tumour overlay
+            # Ground-truth tumour overlay.
             axes[0].imshow(image[0], cmap="gray")
             axes[0].imshow(
                 np.ma.masked_where(mask == 0, mask),
@@ -842,11 +1071,18 @@ def create_app(config_class=Config):
                 vmax=3,
             )
             axes[0].contour(
-                (mask > 0).astype(float), levels=[0.5], colors=["lime"], linewidths=1.5
+                (mask > 0).astype(float),
+                levels=[0.5],
+                colors=["lime"],
+                linewidths=1.5,
             )
-            axes[0].set_title("Ground Truth Overlay", fontsize=15, fontweight="bold")
+            axes[0].set_title(
+                "Ground Truth Overlay",
+                fontsize=15,
+                fontweight="bold",
+            )
 
-            # AI-predicted tumour overlay
+            # AI-predicted tumour overlay.
             axes[1].imshow(image[0], cmap="gray")
             axes[1].imshow(
                 np.ma.masked_where(prediction == 0, prediction),
@@ -861,7 +1097,11 @@ def create_app(config_class=Config):
                 colors=["red"],
                 linewidths=1.5,
             )
-            axes[1].set_title("AI Prediction Overlay", fontsize=15, fontweight="bold")
+            axes[1].set_title(
+                "AI Prediction Overlay",
+                fontsize=15,
+                fontweight="bold",
+            )
 
             for ax in axes:
                 ax.axis("off")
@@ -870,12 +1110,18 @@ def create_app(config_class=Config):
 
             buffer = io.BytesIO()
             fig.savefig(
-                buffer, format="png", dpi=180, bbox_inches="tight", facecolor="white"
+                buffer,
+                format="png",
+                dpi=180,
+                bbox_inches="tight",
+                facecolor="white",
             )
             plt.close(fig)
             buffer.seek(0)
 
-            overlay_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            overlay_image = base64.b64encode(
+                buffer.getvalue()
+            ).decode("utf-8")
 
             return render_template(
                 "2d_demo.html",
@@ -895,7 +1141,10 @@ def create_app(config_class=Config):
 
         except Exception as exc:
             log.exception("2D demo prediction failed")
-            flash(f"Prediction failed: {type(exc).__name__}: {exc}", "danger")
+            flash(
+                f"Prediction failed: {type(exc).__name__}: {exc}",
+                "danger",
+            )
             return redirect(url_for("demo_2d"))
 
     # ---------------- Health Check ----------------
@@ -919,6 +1168,7 @@ def create_app(config_class=Config):
         ), (200 if db_ok else 503)
 
     # ---------------- errors ----------------
+
     @app.errorhandler(404)
     def e404(e):
         return render_template("errors/404.html"), 404
@@ -926,9 +1176,15 @@ def create_app(config_class=Config):
     @app.errorhandler(RequestEntityTooLarge)
     def e413(e):
         msg = f"Upload exceeds the {config_class.MAX_UPLOAD_MB} MB limit."
+
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify(ok=False, errors=[msg]), 413
-        return render_template("errors/error.html", code=413, message=msg), 413
+
+        return render_template(
+            "errors/error.html",
+            code=413,
+            message=msg,
+        ), 413
 
     @app.errorhandler(400)
     def e400(e):
@@ -965,8 +1221,3 @@ if __name__ == "__main__":
         debug=False,
         threaded=True,
     )
-
-
-
-
-

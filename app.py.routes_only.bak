@@ -1,0 +1,43 @@
+    @app.get("/viewer/2d")
+    def viewer_2d():
+        exams = db.get_all_examinations()
+
+        # Open the newest examination that has a saved segmentation.
+        exam = max(
+            (e for e in exams if e.get("segmentation")),
+            key=lambda e: e["id"],
+            default=None,
+        )
+
+        if exam is None:
+            flash(
+                "Run an MRI analysis first to open the 2D viewer.",
+                "warning",
+            )
+            return redirect(url_for("history"))
+
+        return redirect(
+            url_for("results", exam_id=exam["id"])
+        )
+
+    @app.get("/viewer/3d")
+    def viewer_3d():
+        exams = db.get_all_examinations()
+
+        # Use the same saved segmentation as the 2D viewer.
+        exam = max(
+            (e for e in exams if e.get("segmentation")),
+            key=lambda e: e["id"],
+            default=None,
+        )
+
+        if exam is None:
+            flash(
+                "Run an MRI analysis first to open the 3D viewer.",
+                "warning",
+            )
+            return redirect(url_for("history"))
+
+        return redirect(
+            url_for("results", exam_id=exam["id"], view3d=1)
+        )
