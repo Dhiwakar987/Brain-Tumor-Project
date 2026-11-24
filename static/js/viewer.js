@@ -75,7 +75,7 @@
         }
       }
 
-      await watchSegmentation(true);
+      await watchSegmentation(false);
     })().catch(error => {
       console.error('Automatic segmentation failed:', error);
       const box = $('errBox');
@@ -255,4 +255,5 @@
     }
   }
 })();
+
 

@@ -186,6 +186,13 @@
     }
     $('vModality').addEventListener('change', loadMri3d);
     loadMri3d();
+
+    // Navigate to the pre-segmentation 3D MRI planes panel.
+    if (window.AUTO_OPEN_3D) {
+      requestAnimationFrame(() => {
+        p3.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
     return;
   }
 

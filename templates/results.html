@@ -142,7 +142,8 @@
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<script>window.EXAM_ID={{ exam.id }};window.STATUS_URL="{{ url_for('status', exam_id=exam.id) }}";window.MEAS_URL="{{ url_for('measurements', exam_id=exam.id) }}";window.HAS_SEG={{ 'true' if exam.segmentation else 'false' }};window.HAS_GT={{ 'true' if exam.has_ground_truth else 'false' }};window.AUTO_OPEN_3D={{ 'true' if auto_open_3d else 'false' }};</script>
+<script>window.EXAM_ID={{ exam.id }};window.STATUS_URL="{{ url_for('status', exam_id=exam.id) }}";window.MEAS_URL="{{ url_for('measurements', exam_id=exam.id) }}";window.HAS_SEG={{ 'true' if exam.segmentation else 'false' }};window.HAS_GT={{ 'true' if exam.has_ground_truth else 'false' }};window.AUTO_START_SEGMENT={{ 'true' if auto_start else 'false' }};window.AUTO_OPEN_3D={{ 'true' if auto_open_3d else 'false' }};</script>
 <script src="{{ url_for('static', filename='js/viewer.js') }}"></script>
 {% endblock %}
+
 

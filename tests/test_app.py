@@ -30,6 +30,29 @@ def test_unknown_routes_404(client):
     assert client.post("/analysis/999/segment").status_code == 404
 
 
+def test_2d_demo_sample_catalog_requires_matching_image_and_mask(tmp_path):
+    from app import _list_2d_demo_samples
+
+    images_dir = tmp_path / "images"
+    masks_dir = tmp_path / "masks"
+    images_dir.mkdir()
+    masks_dir.mkdir()
+
+    for name in (
+        "BRATS_001_slice010.npy",
+        "BRATS_001_slice011.npy",
+        "BRATS_002_slice001.npy",
+        "not_a_slice.npy",
+    ):
+        (images_dir / name).touch()
+    (masks_dir / "BRATS_001_slice010.npy").touch()
+    (masks_dir / "mask_without_image.npy").touch()
+
+    assert _list_2d_demo_samples(tmp_path) == {
+        "BRATS_001": {10: "BRATS_001_slice010.npy"}
+    }
+
+
 def test_valid_upload_and_history(client):
     r = up(client)
     assert r.status_code == 200 and r.get_json()["ok"]

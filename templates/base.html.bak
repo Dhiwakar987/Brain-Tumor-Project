@@ -17,7 +17,7 @@
     <nav class="side-nav">
       <div class="label">Workspace</div>
       {% set items = [('dashboard','bi-grid-1x2','Dashboard'),('new_analysis','bi-cloud-arrow-up','New MRI analysis'),('viewer_2d','bi-image','2D MRI Viewer'),('viewer_3d','bi-box','3D Segmentation Viewer'),('history','bi-clock-history','Analysis history'),('performance','bi-graph-up','Model performance')] %}
-      {% for ep, icon, label in items %}<a class="{{ 'active' if request.endpoint == ep }}" href="{{ url_for(ep) }}"><i class="bi {{ icon }}"></i>{{ label }}</a>{% endfor %}
+      {% for ep, icon, label in items %}<a class="{{ 'active' if request.endpoint == ep }}" href="{{ url_for(ep, exam_id=exam.id) if exam is defined and exam and exam.id is defined and ep in ['viewer_2d', 'viewer_3d'] else url_for(ep) }}"><i class="bi {{ icon }}"></i>{{ label }}</a>{% endfor %}
       {% if exam is defined and exam and exam.id is defined %}
       <div class="label">Examination #{{ exam.id }}</div>
       {% for ep, icon, label in [('results','bi-brightness-high','MRI results viewer'),('radiomics','bi-bar-chart-line','Radiomics analysis'),('evaluate','bi-rulers','Evaluation'),('report','bi-file-earmark-pdf','Reports & export')] %}

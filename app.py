@@ -1,4 +1,4 @@
-"""Flask application factory + routes. Heavy logic lives in services/."""
+﻿"""Flask application factory + routes. Heavy logic lives in services/."""
 
 import os
 import json
@@ -36,10 +36,34 @@ from config import APP_VERSION, Config
 from database import db
 from model.model_loader import get_model_information, load_model
 from model.inference import predict_slice
+from model.explainability import make_segmentation_gradcam
 from services import file_service as fs
 from services.analysis_service import AnalysisService
 
 csrf = CSRFProtect()
+
+
+def _list_2d_demo_samples(dataset_root):
+    images_dir = dataset_root / "images"
+    masks_dir = dataset_root / "masks"
+    samples = {}
+
+    if not images_dir.is_dir() or not masks_dir.is_dir():
+        return samples
+
+    for image_path in sorted(images_dir.glob("*.npy")):
+        patient_id, separator, slice_number = image_path.stem.rpartition("_slice")
+        if not separator or not slice_number.isdigit():
+            continue
+        if not (masks_dir / image_path.name).is_file():
+            continue
+
+        samples.setdefault(patient_id, {})[int(slice_number)] = image_path.name
+
+    return {
+        patient_id: dict(sorted(patient_samples.items()))
+        for patient_id, patient_samples in sorted(samples.items())
+    }
 
 
 def create_app(config_class=Config):
@@ -707,46 +731,74 @@ def create_app(config_class=Config):
 
     @app.get("/demo/patient-flair-3d/data")
     def patient_flair_3d_data():
-        source = Path.home() / "Downloads" / "patient_003_flair.nii.gz"
+        source = (
+            Path(__file__).resolve().parent
+            / "data"
+            / "brats_preprocessed_100"
+            / "images"
+            / "BRATS_003_FLAIR.nii"
+        )
 
         if not source.is_file():
             return jsonify(
-                error="Patient 003 FLAIR file not found."
+                error=f"Patient 003 FLAIR file not found: {source}"
             ), 404
 
         try:
             import nibabel as nib
             from skimage.measure import marching_cubes
 
-            image = nib.load(str(source))
-            volume = np.asarray(image.dataobj, dtype=np.float32)
+            nii = nib.load(str(source))
+            volume = np.asarray(nii.dataobj, dtype=np.float32)
 
             if volume.ndim != 3:
-                return jsonify(
-                    error="Expected a 3D MRI volume."
-                ), 400
+                raise ValueError(
+                    f"Expected a 3D FLAIR volume, got shape {volume.shape}"
+                )
 
-            # Downsample for a faster browser demonstration.
-            small = volume[::3, ::3, ::3]
-            nonzero = small[small > 0]
+                        # Downsample for a lighter browser visualization.
+            small = volume[::2, ::2, ::2]
 
-            if nonzero.size == 0:
-                return jsonify(
-                    error="The MRI volume contains no nonzero voxels."
-                ), 400
+            finite = small[np.isfinite(small)]
+            if finite.size == 0:
+                raise ValueError("FLAIR volume contains no finite values")
 
-            threshold = float(np.percentile(nonzero, 85))
+            # Exclude zero-valued background before creating the surface.
+            foreground_values = np.abs(finite[np.abs(finite) > 1e-6])
+            if foreground_values.size == 0:
+                raise ValueError("The FLAIR volume appears to contain only background")
 
-            if not (small.min() < threshold < small.max()):
-                return jsonify(
-                    error="Could not create an intensity surface."
-                ), 400
+            threshold = float(np.percentile(foreground_values, 5))
+            surface_mask = np.isfinite(small) & (np.abs(small) >= threshold)
+
+            # Keep the largest connected foreground region and smooth small gaps.
+            from scipy import ndimage
+
+            labels, component_count = ndimage.label(surface_mask)
+            if component_count == 0:
+                raise ValueError("No foreground region found in the FLAIR volume")
+
+            component_sizes = np.bincount(labels.ravel())
+            component_sizes[0] = 0
+            largest_component = int(component_sizes.argmax())
+            surface_mask = labels == largest_component
+
+            surface_mask = ndimage.binary_closing(
+                surface_mask,
+                structure=np.ones((3, 3, 3), dtype=bool),
+                iterations=2,
+            )
+            surface_mask = ndimage.binary_fill_holes(surface_mask)
+
+            if not surface_mask.any():
+                raise ValueError("Could not create a foreground surface")
 
             vertices, faces, _, _ = marching_cubes(
-                small,
-                level=threshold,
+                surface_mask.astype(np.float32),
+                level=0.5,
                 step_size=2,
             )
+            
 
             return jsonify(
                 patient="003",
@@ -765,32 +817,27 @@ def create_app(config_class=Config):
         except Exception:
             log.exception("Patient FLAIR 3D viewer failed")
             return jsonify(
-                error="Could not generate the FLAIR 3D surface. Check the server terminal."
+                error="Could not generate the FLAIR 3D surface. Check the Flask terminal."
             ), 500
 
     # ---------------- 2D MRI Demo ----------------
 
     @app.get("/demo/2d")
     def demo_2d():
-        dataset_dir = (
-            Path.home()
-            / "Downloads"
-            / "_output_"
-            / "brats2d"
-            / "images"
+        dataset_root = (
+            Path(__file__).resolve().parent
+            / "data"
+            / "brats2d_preprocessed_100"
         )
-
-        patient_ids = sorted(
-            {
-                p.stem.rsplit("_slice", 1)[0]
-                for p in dataset_dir.glob("*.npy")
-                if "_slice" in p.stem
-            }
-        ) if dataset_dir.is_dir() else []
+        patient_slices = _list_2d_demo_samples(dataset_root)
 
         return render_template(
             "2d_demo.html",
-            patient_ids=patient_ids,
+            patient_ids=list(patient_slices),
+            patient_slice_indices={
+                patient_id: list(slices)
+                for patient_id, slices in patient_slices.items()
+            },
         )
 
     @app.get("/demo/2d/image/<kind>")
@@ -820,35 +867,44 @@ def create_app(config_class=Config):
     @app.post("/demo/2d/run")
     def demo_2d_run():
         dataset_root = (
-            Path.home()
-            / "Downloads"
-            / "_output_"
-            / "brats2d"
+            Path(__file__).resolve().parent
+            / "data"
+            / "brats2d_preprocessed_100"
         )
         images_dir = dataset_root / "images"
         masks_dir = dataset_root / "masks"
-
-        patient_ids = sorted(
-            {
-                p.stem.rsplit("_slice", 1)[0]
-                for p in images_dir.glob("*.npy")
-                if "_slice" in p.stem
-            }
-        ) if images_dir.is_dir() else []
+        patient_slices = _list_2d_demo_samples(dataset_root)
 
         try:
             patient_id = request.form.get("patient_id", "")
             slice_index = int(request.form.get("slice_index", ""))
 
-            if patient_id not in patient_ids or slice_index < 0:
+            if (
+                patient_id not in patient_slices
+                or slice_index not in patient_slices[patient_id]
+            ):
                 raise ValueError(
-                    "Select a valid patient and slice number."
+                    "Select a valid patient and an available slice number."
                 )
 
-            sample_name = f"{patient_id}_slice{slice_index}.npy"
+            sample_name = patient_slices[patient_id][slice_index]
             image_path = images_dir / sample_name
             mask_path = masks_dir / sample_name
 
+            print("2D DEBUG patient_id:", repr(patient_id))
+            print("2D DEBUG slice_index:", repr(slice_index))
+            print("2D DEBUG images_dir:", images_dir.resolve())
+            print("2D DEBUG masks_dir:", masks_dir.resolve())
+            print("2D DEBUG sample_name:", repr(sample_name))
+            print("2D DEBUG image exists:", image_path.is_file(), image_path)
+            print("2D DEBUG mask exists:", mask_path.is_file(), mask_path)
+            print("2D DEBUG patient_id:", repr(patient_id))
+            print("2D DEBUG slice_index:", repr(slice_index))
+            print("2D DEBUG images_dir:", images_dir.resolve())
+            print("2D DEBUG masks_dir:", masks_dir.resolve())
+            print("2D DEBUG sample_name:", repr(sample_name))
+            print("2D DEBUG image exists:", image_path.is_file(), image_path)
+            print("2D DEBUG mask exists:", mask_path.is_file(), mask_path)
             if not image_path.is_file() or not mask_path.is_file():
                 raise ValueError(
                     "That slice or its matching mask was not found. "
@@ -885,18 +941,8 @@ def create_app(config_class=Config):
                     "Mask labels must be 0, 1, 2, or 3."
                 )
 
-            if image.min() < 0 or image.max() > 255:
-                raise ValueError(
-                    "Expected MRI channel values between 0 and 255."
-                )
-
-            if mask.min() < 0:
-                raise ValueError(
-                    "Mask labels cannot be negative."
-                )
-
-            # Scale uint8 MRI channels to [0,1]; supported by the 2D preprocessing probe, but original training preprocessing remains unverified.
-            image = image.astype(np.float32) / 255.0
+            # MRI channels are already preprocessed.
+            image = image.astype(np.float32)
             mask = mask.astype(np.uint8)
 
             padded = np.pad(
@@ -913,6 +959,11 @@ def create_app(config_class=Config):
 
             prediction = predict_slice(model, padded, device)
             prediction = prediction[8:248, 8:248]
+
+            # Experimental Grad-CAM heatmap.
+            gradcam = make_segmentation_gradcam(model, padded, device)
+            gradcam = gradcam[8:248, 8:248]
+        
 
             # Calculate 2D tumour measurements.
             tumour_mask = prediction > 0
@@ -1122,10 +1173,46 @@ def create_app(config_class=Config):
             overlay_image = base64.b64encode(
                 buffer.getvalue()
             ).decode("utf-8")
+            
+            # Create the Grad-CAM visualization.
+            fig, ax = plt.subplots(figsize=(7, 7))
+
+            ax.imshow(image[0], cmap="gray")
+            ax.imshow(
+            gradcam,
+            cmap="magma",
+            alpha=0.5,
+            vmin=0,
+            vmax=1,
+            )
+
+            ax.set_title("Experimental Grad-CAM Heatmap")
+            ax.axis("off")
+
+            fig.tight_layout()
+
+            buffer = io.BytesIO()
+            fig.savefig(
+            buffer,
+            format="png",
+            dpi=180,
+            bbox_inches="tight",
+            facecolor="white",
+            )
+            plt.close(fig)
+            buffer.seek(0)
+
+            gradcam_image = base64.b64encode(
+            buffer.getvalue()
+            ).decode("utf-8")
 
             return render_template(
                 "2d_demo.html",
-                patient_ids=patient_ids,
+                patient_ids=list(patient_slices),
+                patient_slice_indices={
+                    patient_id: list(slices)
+                    for patient_id, slices in patient_slices.items()
+                },
                 comparison_image=comparison_image,
                 overlay_image=overlay_image,
                 prediction_classes=np.unique(prediction).tolist(),
@@ -1221,3 +1308,7 @@ if __name__ == "__main__":
         debug=False,
         threaded=True,
     )
+
+
+
+

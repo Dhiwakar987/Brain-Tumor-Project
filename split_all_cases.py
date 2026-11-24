@@ -2,45 +2,33 @@
 import nibabel as nib
 import numpy as np
 
-source_dir = Path(r"C:\BraTS_Data\imagesTr")
-output_dir = Path(r"C:\BraTS_Data\split_for_web")
-modalities = {"FLAIR": 0, "T1": 1, "T1ce": 2, "T2": 3}
+source = Path("data/brats_subset_100/imagesTr")
+output = Path("data/brats_subset_100/split")
+output.mkdir(parents=True, exist_ok=True)
 
-files = sorted(
-    p for p in source_dir.iterdir()
-    if p.is_file() and (p.name.endswith(".nii") or p.name.endswith(".nii.gz"))
-)
+modalities = ["FLAIR", "T1", "T1ce", "T2"]
+files = sorted(source.glob("*.nii"))
 
-print(f"Found {len(files)} source files.")
-done = 0
-skipped = 0
+if not files:
+    raise SystemExit(f"No .nii files found in {source.resolve()}")
 
-for i, source in enumerate(files, 1):
-    case_id = source.name.removesuffix(".nii.gz").removesuffix(".nii")
-    case_dir = output_dir / case_id
+for path in files:
+    image = nib.load(path)
+    data = image.get_fdata(dtype=np.float32)
 
-    try:
-        img = nib.load(str(source))
-        if len(img.shape) != 4 or img.shape[-1] != 4:
-            print(f"SKIP {source.name}: expected 4 channels, got {img.shape}")
-            skipped += 1
-            continue
+    if data.ndim != 4 or data.shape[-1] != 4:
+        print(f"Skipping {path.name}: unexpected shape {data.shape}")
+        continue
 
-        case_dir.mkdir(parents=True, exist_ok=True)
+    for channel, modality in enumerate(modalities):
+        volume = nib.Nifti1Image(
+            data[..., channel],
+            image.affine,
+            image.header.copy()
+        )
+        destination = output / f"{path.stem}_{modality}.nii"
+        nib.save(volume, destination)
 
-        for name, channel in modalities.items():
-            destination = case_dir / f"{name}.nii.gz"
-            volume = np.asarray(img.dataobj[..., channel], dtype=np.float32)
-            out_img = nib.Nifti1Image(volume, img.affine, header=img.header.copy())
-            out_img.set_data_dtype(np.float32)
-            nib.save(out_img, str(destination))
+    print(f"Split {path.name}")
 
-        done += 1
-        print(f"{i}/{len(files)}: prepared {case_id}")
-
-    except Exception as e:
-        print(f"ERROR {source.name}: {e}")
-        skipped += 1
-
-print(f"\nFinished. Prepared {done} cases; skipped/failed {skipped}.")
-print(f"Output folder: {output_dir}")
+print(f"Finished. Split files are in: {output.resolve()}")

@@ -143,23 +143,49 @@
 
                 <div class="mb-3">
                     <label for="slice_index" class="form-label">Slice number</label>
-                    <input
-                        type="number"
-                        class="form-control"
+                    <select
+                        class="form-select"
                         id="slice_index"
                         name="slice_index"
-                        min="0"
-                        value="10"
                         required>
+                    </select>
                 </div>
 
                 <button type="submit" class="btn btn-primary">
                     Load Slice and Run Segmentation
                 </button>
             </form>
+            <script>
+                (() => {
+                    const patientSlices = {{ patient_slice_indices|tojson }};
+                    const patientSelect = document.getElementById("patient_id");
+                    const sliceSelect = document.getElementById("slice_index");
+
+                    function updateSlices() {
+                        const availableSlices = patientSlices[patientSelect.value] || [];
+                        sliceSelect.innerHTML = "";
+
+                        availableSlices.forEach((slice) => {
+                            const option = document.createElement("option");
+                            option.value = slice;
+                            option.textContent = slice;
+                            option.selected = slice === 10;
+                            sliceSelect.appendChild(option);
+                        });
+
+                        if (!availableSlices.includes(10) && sliceSelect.options.length) {
+                            sliceSelect.options[0].selected = true;
+                        }
+                    }
+
+                    patientSelect.addEventListener("change", updateSlices);
+                    updateSlices();
+                })();
+            </script>
             {% else %}
             <div class="alert alert-warning">
-                Dataset not found. Check the brats2d images folder.
+                No matching MRI image and mask slices were found.
+                Check the brats2d_preprocessed_100 images and masks folders.
             </div>
             {% endif %}
         </div>
